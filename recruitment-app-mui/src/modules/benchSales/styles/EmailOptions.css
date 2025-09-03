@@ -1,0 +1,240 @@
+/* src/modules/benchSales/styles/EmailOptions.css */
+
+.email-options-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  animation: fadeIn 0.3s;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.email-options-modal {
+  background: white;
+  border-radius: 20px;
+  padding: 30px;
+  max-width: 500px;
+  width: 90%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.email-options-modal h3 {
+  margin: 0 0 15px 0;
+  color: #2d3748;
+  font-size: 1.4rem;
+}
+
+.email-options-modal p {
+  color: #718096;
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+/* OAuth Options */
+.oauth-options {
+  margin: 20px 0;
+}
+
+.oauth-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  margin-top: 20px;
+}
+
+.oauth-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 14px 20px;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  background: white;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.oauth-btn img {
+  width: 20px;
+  height: 20px;
+}
+
+.oauth-btn.google:hover {
+  border-color: #4285f4;
+  background: #f0f7ff;
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(66, 133, 244, 0.2);
+}
+
+.oauth-btn.microsoft:hover {
+  border-color: #00a4ef;
+  background: #f0f9ff;
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(0, 164, 239, 0.2);
+}
+
+/* Send Options */
+.send-options {
+  margin: 20px 0;
+}
+
+.send-options > p {
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  border-radius: 8px;
+  padding: 12px;
+  color: #166534;
+  margin-bottom: 25px;
+  font-weight: 500;
+}
+
+.action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.action-buttons .btn {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.action-buttons .btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.action-buttons .btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 20px rgba(102, 126, 234, 0.3);
+}
+
+.action-buttons .btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.action-buttons .btn-secondary {
+  background: white;
+  color: #667eea;
+  border: 2px solid #667eea;
+}
+
+.action-buttons .btn-secondary:hover {
+  background: #f0f4ff;
+  transform: translateY(-1px);
+}
+
+.action-buttons .btn-cancel {
+  background: #f7fafc;
+  color: #718096;
+  border: 2px solid #e2e8f0;
+}
+
+.action-buttons .btn-cancel:hover {
+  background: #edf2f7;
+  border-color: #cbd5e0;
+}
+
+/* Form Success Animation */
+.form-success {
+  text-align: center;
+  padding: 40px;
+}
+
+.form-success .success-icon {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 20px;
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 40px;
+  animation: successPulse 0.6s ease-out;
+}
+
+@keyframes successPulse {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Loading State */
+.oauth-loading {
+  text-align: center;
+  padding: 30px;
+}
+
+.oauth-loading .spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 20px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Mobile Responsive */
+@media (max-width: 480px) {
+  .email-options-modal {
+    padding: 20px;
+    width: 95%;
+  }
+  
+  .email-options-modal h3 {
+    font-size: 1.2rem;
+  }
+  
+  .oauth-btn,
+  .action-buttons .btn {
+    font-size: 14px;
+    padding: 12px;
+  }
+}
