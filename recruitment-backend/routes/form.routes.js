@@ -1,202 +1,90 @@
-// recruitment-backend/routes/form.routes.js
+// recruitment-backend/routes/form.routes.js - SIMPLIFIED VERSION
 const express = require('express');
 const router = express.Router();
 const database = require('../utils/database');
-const emailService = require('../services/emailService');
-const pollingService = require('../services/pollingService');
 
-// ==================== FORM CREATION & SENDING ====================
+// ==================== LEGACY FORM ROUTES ====================
+// These routes are kept for backward compatibility with existing frontend
+// New implementations should use /api/templates and /api/responses
 
-// Create and send form to candidate
-router.post('/send', async (req, res) => {
-  try {
-    const {
-      caseId,
-      candidateEmail,
-      candidateName,
-      senderEmail,
-      fields
-    } = req.body;
-    
-    // Validate required fields
-    if (!candidateEmail || !senderEmail || !caseId) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required fields'
-      });
-    }
-    
-    // Generate unique token
-    const token = generateToken();
-    
-    // Create form data
-    const formData = {
-      token,
-      caseId,
-      candidateEmail,
-      candidateName: candidateName || candidateEmail.split('@')[0],
-      senderEmail,
-      fields: fields || getDefaultFields()
-    };
-    
-    // Save form to database
-    await database.createForm(formData);
-    
-    // Send email
-    const emailResult = await emailService.sendFormEmail(formData);
-    
-    // Update form status to 'sent'
-    await database.updateFormStatus(token, 'sent', {
-      email_message_id: emailResult.messageId
-    });
-    
-    res.json({
-      success: true,
-      token,
-      message: 'Form sent successfully',
-      emailProvider: emailResult.provider
-    });
-    
-  } catch (error) {
-    console.error('Error sending form:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to send form'
-    });
-  }
-});
-
-// ==================== FORM RETRIEVAL ====================
-
-// Get form by token (for candidates to fill)
+/**
+ * GET /api/forms/:token
+ * Get form by token (for candidates to fill)
+ * Redirects to new template service
+ */
 router.get('/:token', async (req, res) => {
   try {
     const { token } = req.params;
+    const formTemplateService = require('../services/formTemplateService');
     
-    const form = await database.getFormByToken(token);
-    
-    if (!form) {
-      return res.status(404).json({
-        success: false,
-        error: 'Form not found or expired'
-      });
-    }
-    
-    if (form.status === 'completed') {
-      return res.status(400).json({
-        success: false,
-        error: 'Form has already been submitted'
-      });
-    }
-    
-    // Mark form as opened if it was just sent
-    if (form.status === 'sent') {
-      await database.updateFormStatus(token, 'opened');
-      await database.logActivity(
-        form.case_id,
-        token,
-        'form_opened',
-        `Form opened by candidate`,
-        form.candidate_email
-      );
-    }
+    const form = await formTemplateService.getFormByToken(token);
     
     res.json({
       success: true,
-      form: {
-        token: form.token,
-        fields: form.fields,
-        candidateEmail: form.candidate_email,
-        candidateName: form.candidate_name,
-        caseId: form.case_id
-      }
+      form
     });
-    
   } catch (error) {
     console.error('Error getting form:', error);
-    res.status(500).json({
+    
+    let statusCode = 500;
+    if (error.message === 'Form not found') statusCode = 404;
+    if (error.message === 'Form has expired') statusCode = 410;
+    if (error.message === 'Form has already been submitted') statusCode = 409;
+    
+    res.status(statusCode).json({
       success: false,
-      error: 'Failed to retrieve form'
+      error: error.message || 'Failed to retrieve form'
     });
   }
 });
 
-// ==================== FORM SUBMISSION ====================
-
-// Submit form (by candidate)
+/**
+ * POST /api/forms/:token/submit
+ * Submit form (by candidate)
+ * Redirects to new response service
+ */
 router.post('/:token/submit', async (req, res) => {
   try {
     const { token } = req.params;
     const { responses } = req.body;
+    const responseService = require('../services/responseService');
     
-    if (!responses) {
-      return res.status(400).json({
-        success: false,
-        error: 'No form data provided'
-      });
-    }
+    // Get metadata
+    const metadata = {
+      ip: req.ip || req.connection.remoteAddress,
+      userAgent: req.headers['user-agent']
+    };
     
-    const form = await database.getFormByToken(token);
-    
-    if (!form) {
-      return res.status(404).json({
-        success: false,
-        error: 'Form not found'
-      });
-    }
-    
-    if (form.status === 'completed') {
-      return res.status(400).json({
-        success: false,
-        error: 'Form has already been submitted'
-      });
-    }
-    
-    // Validate responses against required fields
-    const validationErrors = validateFormResponses(form.fields, responses);
-    if (validationErrors.length > 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'Validation failed',
-        errors: validationErrors
-      });
-    }
-    
-    // Update form status
-    await database.updateFormStatus(token, 'completed', {
-      response_data: responses
-    });
-    
-    // Log activity
-    await database.logActivity(
-      form.case_id,
+    const result = await responseService.submitResponse({
       token,
-      'form_completed',
-      `Form submitted by candidate`,
-      form.candidate_email
-    );
-    
-    res.json({
-      success: true,
-      message: 'Form submitted successfully'
+      responses,
+      metadata
     });
     
+    res.json(result);
   } catch (error) {
     console.error('Error submitting form:', error);
-    res.status(500).json({
+    
+    let statusCode = 500;
+    if (error.message.includes('Invalid form token')) statusCode = 404;
+    if (error.message.includes('already been submitted')) statusCode = 409;
+    if (error.message.includes('expired')) statusCode = 410;
+    if (error.message.includes('Validation failed')) statusCode = 400;
+    
+    res.status(statusCode).json({
       success: false,
-      error: 'Failed to submit form'
+      error: error.message || 'Failed to submit form'
     });
   }
 });
 
-// ==================== FORM STATUS & TRACKING ====================
-
-// Get form status by token
+/**
+ * GET /api/forms/:token/status
+ * Get form status
+ */
 router.get('/:token/status', async (req, res) => {
   try {
     const { token } = req.params;
-    
     const form = await database.getFormByToken(token);
     
     if (!form) {
@@ -205,22 +93,18 @@ router.get('/:token/status', async (req, res) => {
         error: 'Form not found'
       });
     }
-    
-    // Get email tracking info
-    const emailStatus = await emailService.checkEmailStatus(token);
     
     res.json({
       success: true,
       status: {
         formStatus: form.status,
-        emailStatus: emailStatus.status,
         sentDate: form.sent_date,
         openedDate: form.opened_date,
         completedDate: form.completed_date,
-        hasResponses: !!form.response_data
+        hasResponses: !!form.response_data,
+        expiresAt: form.expires_at
       }
     });
-    
   } catch (error) {
     console.error('Error getting form status:', error);
     res.status(500).json({
@@ -230,12 +114,17 @@ router.get('/:token/status', async (req, res) => {
   }
 });
 
-// Get all forms for a case
+/**
+ * GET /api/forms/case/:caseId
+ * Get all forms for a case
+ */
 router.get('/case/:caseId', async (req, res) => {
   try {
     const { caseId } = req.params;
-    
-    const forms = await database.getFormsByCaseId(caseId);
+    const forms = await database.all(
+      'SELECT * FROM forms WHERE case_id = ? ORDER BY created_date DESC',
+      [caseId]
+    );
     
     res.json({
       success: true,
@@ -250,7 +139,6 @@ router.get('/case/:caseId', async (req, res) => {
         hasResponses: !!form.response_data
       }))
     });
-    
   } catch (error) {
     console.error('Error getting case forms:', error);
     res.status(500).json({
@@ -260,35 +148,96 @@ router.get('/case/:caseId', async (req, res) => {
   }
 });
 
-// ==================== FORM RESPONSES ====================
+/**
+ * POST /api/forms/send
+ * Legacy endpoint - redirects to new template service
+ */
+router.post('/send', async (req, res) => {
+  try {
+    const {
+      templateId,
+      caseId,
+      candidateEmail,
+      candidateName,
+      senderEmail,
+      senderName
+    } = req.body;
+    
+    const formTemplateService = require('../services/formTemplateService');
+    
+    // Use default template if not specified
+    let useTemplateId = templateId;
+    if (!useTemplateId) {
+      // Get default template
+      const templates = await database.all(
+        'SELECT id FROM form_templates WHERE is_default = 1 LIMIT 1'
+      );
+      if (templates.length > 0) {
+        useTemplateId = templates[0].id;
+      } else {
+        return res.status(400).json({
+          success: false,
+          error: 'No default template found'
+        });
+      }
+    }
+    
+    // Use new service to send form
+    const result = await formTemplateService.sendForm({
+      templateId: useTemplateId,
+      candidateEmail,
+      candidateName,
+      caseId,
+      senderEmail: senderEmail || req.headers['x-user-email'] || 'system',
+      senderName
+    });
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Error sending form:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to send form'
+    });
+  }
+});
 
-// Get form responses
+/**
+ * GET /api/forms/:token/responses
+ * Get form responses
+ */
 router.get('/:token/responses', async (req, res) => {
   try {
     const { token } = req.params;
     
-    const form = await database.getFormByToken(token);
+    // Get response from candidate_responses table
+    const response = await database.get(
+      'SELECT * FROM candidate_responses WHERE form_token = ?',
+      [token]
+    );
     
-    if (!form) {
-      return res.status(404).json({
-        success: false,
-        error: 'Form not found'
-      });
-    }
-    
-    if (!form.response_data) {
-      return res.status(404).json({
-        success: false,
-        error: 'No responses found'
+    if (!response) {
+      // Fallback to old forms table
+      const form = await database.getFormByToken(token);
+      if (!form || !form.response_data) {
+        return res.status(404).json({
+          success: false,
+          error: 'No responses found'
+        });
+      }
+      
+      return res.json({
+        success: true,
+        responses: form.response_data,
+        submittedAt: form.completed_date
       });
     }
     
     res.json({
       success: true,
-      responses: form.response_data,
-      submittedAt: form.completed_date
+      responses: JSON.parse(response.response_data),
+      submittedAt: response.submitted_at
     });
-    
   } catch (error) {
     console.error('Error getting form responses:', error);
     res.status(500).json({
@@ -298,13 +247,56 @@ router.get('/:token/responses', async (req, res) => {
   }
 });
 
-// ==================== RESEND FORM ====================
+/**
+ * GET /api/forms/pending/all
+ * Get all pending forms
+ */
+router.get('/pending/all', async (req, res) => {
+  try {
+    const forms = await database.all(`
+      SELECT f.*, cr.id as response_id
+      FROM forms f
+      LEFT JOIN candidate_responses cr ON f.token = cr.form_token
+      WHERE f.status IN ('created', 'sent', 'opened')
+      AND (f.expires_at IS NULL OR f.expires_at > datetime('now'))
+      ORDER BY f.created_date DESC
+    `);
+    
+    res.json({
+      success: true,
+      count: forms.length,
+      forms: forms.map(form => ({
+        token: form.token,
+        caseId: form.case_id,
+        candidateEmail: form.candidate_email,
+        candidateName: form.candidate_name,
+        status: form.status,
+        sentDate: form.sent_date,
+        hasResponse: !!form.response_id,
+        daysSinceSent: form.sent_date 
+          ? Math.floor((Date.now() - new Date(form.sent_date)) / (1000 * 60 * 60 * 24))
+          : null,
+        expiresIn: form.expires_at
+          ? Math.floor((new Date(form.expires_at) - Date.now()) / (1000 * 60 * 60 * 24))
+          : null
+      }))
+    });
+  } catch (error) {
+    console.error('Error getting pending forms:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get pending forms'
+    });
+  }
+});
 
-// Resend form email
+/**
+ * POST /api/forms/:token/resend
+ * Resend form email (generates new mailto link)
+ */
 router.post('/:token/resend', async (req, res) => {
   try {
     const { token } = req.params;
-    
     const form = await database.getFormByToken(token);
     
     if (!form) {
@@ -321,17 +313,15 @@ router.post('/:token/resend', async (req, res) => {
       });
     }
     
-    // Resend email
-    const formData = {
+    // Generate new mailto link
+    const emailService = require('../services/emailService');
+    const emailData = await emailService.prepareFormEmail({
       token: form.token,
-      caseId: form.case_id,
       candidateEmail: form.candidate_email,
       candidateName: form.candidate_name,
       senderEmail: form.sender_email,
-      fields: form.fields
-    };
-    
-    const emailResult = await emailService.sendFormEmail(formData);
+      senderName: req.body.senderName || 'Recruitment Team'
+    });
     
     // Log activity
     await database.logActivity(
@@ -344,9 +334,10 @@ router.post('/:token/resend', async (req, res) => {
     
     res.json({
       success: true,
-      message: 'Form resent successfully'
+      message: 'Form link regenerated successfully',
+      mailtoLink: emailData.mailtoLink,
+      emailContent: emailData.emailContent
     });
-    
   } catch (error) {
     console.error('Error resending form:', error);
     res.status(500).json({
@@ -356,123 +347,53 @@ router.post('/:token/resend', async (req, res) => {
   }
 });
 
-// ==================== POLLING & CHECKING ====================
-
-// Manually check for email responses
-router.post('/check-responses/:caseId', async (req, res) => {
+/**
+ * DELETE /api/forms/:token
+ * Cancel/delete a form
+ */
+router.delete('/:token', async (req, res) => {
   try {
-    const { caseId } = req.params;
+    const { token } = req.params;
+    const userEmail = req.headers['x-user-email'] || 'system';
     
-    const result = await pollingService.manualCheck(caseId);
-    
-    res.json({
-      success: true,
-      result
-    });
-    
-  } catch (error) {
-    console.error('Error checking responses:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to check for responses'
-    });
-  }
-});
-
-// ==================== BULK OPERATIONS ====================
-
-// Get all pending forms
-router.get('/pending/all', async (req, res) => {
-  try {
-    const forms = await database.getPendingForms();
-    
-    res.json({
-      success: true,
-      count: forms.length,
-      forms: forms.map(form => ({
-        token: form.token,
-        caseId: form.case_id,
-        candidateEmail: form.candidate_email,
-        status: form.status,
-        sentDate: form.sent_date,
-        daysSinceSent: form.sent_date 
-          ? Math.floor((Date.now() - new Date(form.sent_date)) / (1000 * 60 * 60 * 24))
-          : null
-      }))
-    });
-    
-  } catch (error) {
-    console.error('Error getting pending forms:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to get pending forms'
-    });
-  }
-});
-
-// ==================== HELPER FUNCTIONS ====================
-
-function generateToken() {
-  return Math.random().toString(36).substring(2, 15) + 
-         Math.random().toString(36).substring(2, 15) +
-         Date.now().toString(36);
-}
-
-function getDefaultFields() {
-  return [
-    { id: 'name', label: 'Full Name', type: 'text', required: true },
-    { id: 'email', label: 'Email', type: 'email', required: true },
-    { id: 'phone', label: 'Phone', type: 'tel', required: true },
-    { id: 'linkedIn', label: 'LinkedIn Profile', type: 'url', required: false },
-    { id: 'location', label: 'Current Location', type: 'text', required: true },
-    { id: 'visa', label: 'Visa Status', type: 'select', required: true,
-      options: ['H1B', 'OPT-EAD', 'GC-EAD', 'Green Card', 'US Citizen'] },
-    { id: 'experience', label: 'Years of Experience', type: 'select', required: true,
-      options: ['0-2 years', '2-5 years', '5-8 years', '8-10 years', '10+ years'] },
-    { id: 'skills', label: 'Technical Skills', type: 'textarea', required: true },
-    { id: 'education', label: 'Highest Education', type: 'select', required: true,
-      options: ['High School', 'Associate', 'Bachelor', 'Master', 'PhD'] },
-    { id: 'availability', label: 'Availability', type: 'select', required: true,
-      options: ['Immediate', '2 weeks', '1 month', 'More than 1 month'] }
-  ];
-}
-
-function validateFormResponses(fields, responses) {
-  const errors = [];
-  
-  for (const field of fields) {
-    if (field.required && !responses[field.id]) {
-      errors.push({
-        field: field.id,
-        message: `${field.label} is required`
+    const form = await database.getFormByToken(token);
+    if (!form) {
+      return res.status(404).json({
+        success: false,
+        error: 'Form not found'
       });
     }
     
-    // Email validation
-    if (field.type === 'email' && responses[field.id]) {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(responses[field.id])) {
-        errors.push({
-          field: field.id,
-          message: `Invalid email format`
-        });
-      }
+    if (form.status === 'completed') {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot delete completed form'
+      });
     }
     
-    // URL validation
-    if (field.type === 'url' && responses[field.id]) {
-      try {
-        new URL(responses[field.id]);
-      } catch {
-        errors.push({
-          field: field.id,
-          message: `Invalid URL format`
-        });
-      }
-    }
+    // Mark form as cancelled
+    await database.updateFormStatus(token, 'cancelled');
+    
+    // Log activity
+    await database.logActivity(
+      form.case_id,
+      token,
+      'form_cancelled',
+      `Form cancelled by ${userEmail}`,
+      userEmail
+    );
+    
+    res.json({
+      success: true,
+      message: 'Form cancelled successfully'
+    });
+  } catch (error) {
+    console.error('Error cancelling form:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to cancel form'
+    });
   }
-  
-  return errors;
-}
+});
 
 module.exports = router;

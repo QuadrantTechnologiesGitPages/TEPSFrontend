@@ -162,3 +162,134 @@
   border-radius: 20px;
   text-align: center;
 }
+/* Success Message Animations */
+.success-message {
+  background: white;
+  border-radius: 12px;
+  padding: 40px;
+  max-width: 600px;
+  margin: 0 auto;
+  text-align: center;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+}
+
+.success-message.animate-in {
+  animation: slideUp 0.5s ease;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.success-icon {
+  margin: 0 auto 30px;
+}
+
+.checkmark {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: draw 0.8s ease forwards 0.3s;
+}
+
+@keyframes draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.success-message h2 {
+  color: #4CAF50;
+  margin-bottom: 15px;
+  font-size: 32px;
+}
+
+.main-message {
+  font-size: 18px;
+  color: #555;
+  margin-bottom: 30px;
+}
+
+.next-steps {
+  background: #f5f5f5;
+  border-radius: 8px;
+  padding: 25px;
+  margin: 30px 0;
+  text-align: left;
+}
+
+.next-steps h3 {
+  color: #333;
+  margin-bottom: 15px;
+  font-size: 18px;
+}
+
+.next-steps ul {
+  list-style: none;
+  padding: 0;
+}
+
+.next-steps li {
+  padding: 10px 0;
+  padding-left: 30px;
+  position: relative;
+  color: #666;
+}
+
+.next-steps li:before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  color: #4CAF50;
+  font-weight: bold;
+}
+
+.contact-info {
+  color: #888;
+  font-size: 14px;
+  margin-top: 20px;
+}
+
+/* Inline Error */
+.inline-error {
+  background: #fee;
+  border: 1px solid #fcc;
+  color: #c00;
+  padding: 12px;
+  border-radius: 6px;
+  margin-bottom: 20px;
+  animation: shake 0.3s ease;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
+/* Field-level error improvements */
+.form-field input.error,
+.form-field select.error,
+.form-field textarea.error {
+  border: 2px solid #e74c3c;
+  background: #fff5f5;
+}
+
+.form-field .error-message {
+  display: block;
+  color: #e74c3c;
+  font-size: 13px;
+  margin-top: 5px;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

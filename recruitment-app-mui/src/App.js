@@ -1,5 +1,6 @@
-// src/App.js - COMPLETE FILE WITH CANDIDATE FORM SUPPORT
+// src/App.js - WITH REACT ROUTER
 import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import './styles/globals.css';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './components/auth/Login';
@@ -13,12 +14,22 @@ import BenchSalesDashboard from './modules/benchSales/components/Dashboard/Bench
 import { CaseProvider } from './modules/benchSales/contexts/CaseContext';
 import CaseList from './modules/benchSales/components/CaseManagement/CaseList';
 import CaseDetails from './modules/benchSales/components/CaseManagement/CaseDetails';
-import IntakeForm from './modules/benchSales/components/CandidateIntake/IntakeForm';
-import FormBuilder from './modules/benchSales/components/FormBuilder/FormBuilder';
-import SendFormModal from './modules/benchSales/components/FormBuilder/SendFormModal';
+
+// Form system imports
+import FormDesigner from './modules/benchSales/components/FormDesigner/FormDesigner';
+import TemplateList from './modules/benchSales/components/FormDesigner/TemplateList';
+import ResponseList from './modules/benchSales/components/ResponseManagement/ResponseList';
 import PublicCandidateForm from './modules/benchSales/components/CandidateForm/PublicCandidateForm';
+import { Toaster } from 'react-hot-toast';
 import { mockCandidates } from './data/mockData';
 import { searchCandidates } from './utils/candidateMatcher';
+
+// Public Form Wrapper Component
+function PublicFormWrapper() {
+  const pathParts = window.location.pathname.split('/');
+  const token = pathParts[pathParts.length - 1];
+  return <PublicCandidateForm token={token} />;
+}
 
 function AppContent() {
   const { isAuthenticated, user, roles, logout, hasRole } = useAuth();
@@ -36,12 +47,11 @@ function AppContent() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [messageOpen, setMessageOpen] = useState(false);
   const [messageType, setMessageType] = useState('');
-  const [showIntakeForm, setShowIntakeForm] = useState(false);
-  const [intakeEditData, setIntakeEditData] = useState(null);
-  const [showFormBuilder, setShowFormBuilder] = useState(false);
-  const [showSendForm, setShowSendForm] = useState(false);
-  const [sendFormCase, setSendFormCase] = useState(null);
-  const [isPublicForm, setIsPublicForm] = useState(false);
+  
+  // New states for FormDesigner
+  const [showFormDesigner, setShowFormDesigner] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState(null);
+  const [showResponses, setShowResponses] = useState(false);
 
   // Always call hooks in the same order
   const isBenchSales = hasRole('BenchSales');
@@ -49,13 +59,6 @@ function AppContent() {
   const isRecruitment = hasRole('Recruitment');
 
   useEffect(() => {
-    // Check if this is a candidate form URL (public access)
-    if (window.location.pathname.startsWith('/candidate-form/')) {
-      setIsPublicForm(true);
-      setCurrentView('candidateForm');
-      return;
-    }
-
     // Initialize cases in localStorage if not exists
     if (!localStorage.getItem('cases')) {
       const initialCases = mockCandidates.map((candidate, index) => ({
@@ -78,11 +81,17 @@ function AppContent() {
       }));
       localStorage.setItem('cases', JSON.stringify(initialCases));
     }
-  }, []);
+
+    // Store user email for API calls
+    if (user?.email) {
+      localStorage.setItem('userEmail', user.email);
+      localStorage.setItem('userName', user.name || user.email.split('@')[0]);
+    }
+  }, [user]);
 
   useEffect(() => {
     // Determine initial view based on role
-    if (isAuthenticated && !isPublicForm) {
+    if (isAuthenticated) {
       if (isBenchSales) {
         setCurrentView('benchSalesDashboard');
       } else if (isLeadership) {
@@ -93,18 +102,23 @@ function AppContent() {
         setCurrentView('search'); // Default
       }
     }
-  }, [isAuthenticated, isBenchSales, isLeadership, isRecruitment, isPublicForm]);
+  }, [isAuthenticated, isBenchSales, isLeadership, isRecruitment]);
 
   useEffect(() => {
     const handleNavigation = (e) => {
       if (e.detail?.view) {
-        if (e.detail.view === 'intake') {
-          setShowIntakeForm(true);
-          setIntakeEditData(null);
-        } else if (e.detail.view === 'formBuilder') {
-          setShowFormBuilder(true);
-        } else {
-          setCurrentView(e.detail.view);
+        switch (e.detail.view) {
+          case 'formDesigner':
+            setShowFormDesigner(true);
+            break;
+          case 'responses':
+            setShowResponses(true);
+            break;
+          case 'templates':
+            setCurrentView('templates');
+            break;
+          default:
+            setCurrentView(e.detail.view);
         }
       }
     };
@@ -146,22 +160,23 @@ function AppContent() {
     setTimeout(() => setMessageType(''), 300);
   };
 
-  const handleEditCase = (caseData) => {
-    setIntakeEditData(caseData);
-    setShowIntakeForm(true);
+  // Handler for QuickActions
+  const handleQuickAction = (action) => {
+    switch (action) {
+      case 'newIntake':
+        setShowFormDesigner(true);
+        setEditingTemplate(null);
+        break;
+      case 'viewResponses':
+        setShowResponses(true);
+        break;
+      case 'templates':
+        setCurrentView('templates');
+        break;
+      default:
+        break;
+    }
   };
-
-  const handleSendForm = (caseData) => {
-    setSendFormCase(caseData);
-    setShowSendForm(true);
-  };
-
-  // If this is a public form, render it without authentication
-  if (isPublicForm) {
-    const pathParts = window.location.pathname.split('/');
-    const formToken = pathParts[pathParts.length - 1];
-    return <PublicCandidateForm token={formToken} />;
-  }
 
   // Move the early return AFTER all hooks
   if (!isAuthenticated) {
@@ -171,14 +186,21 @@ function AppContent() {
   const renderView = () => {
     switch(currentView) {
       case 'benchSalesDashboard':
-        return <BenchSalesDashboard />;
+        return (
+          <BenchSalesDashboard 
+            onQuickAction={handleQuickAction}
+          />
+        );
       
       case 'cases':
         return (
           <>
             <CaseList 
-              onEditCase={handleEditCase}
-              onSendForm={handleSendForm}
+              onSendForm={(caseData) => {
+                // Open FormDesigner with case context
+                setEditingTemplate({ caseId: caseData.caseId });
+                setShowFormDesigner(true);
+              }}
             />
             {selectedCaseId && (
               <CaseDetails 
@@ -187,6 +209,23 @@ function AppContent() {
               />
             )}
           </>
+        );
+
+      case 'responses':
+        return <ResponseList />;
+
+      case 'templates':
+        return (
+          <TemplateList
+            onEditTemplate={(template) => {
+              setEditingTemplate(template);
+              setShowFormDesigner(true);
+            }}
+            onCreateNew={() => {
+              setEditingTemplate(null);
+              setShowFormDesigner(true);
+            }}
+          />
         );
       
       case 'search':
@@ -241,10 +280,16 @@ function AppContent() {
                 Cases
               </button>
               <button 
-                className="nav-tab"
-                onClick={() => setShowFormBuilder(true)}
+                className={`nav-tab ${currentView === 'responses' ? 'active' : ''}`}
+                onClick={() => setCurrentView('responses')}
               >
-                Form Templates
+                Form Responses
+              </button>
+              <button 
+                className={`nav-tab ${currentView === 'templates' ? 'active' : ''}`}
+                onClick={() => setCurrentView('templates')}
+              >
+                Templates
               </button>
             </>
           )}
@@ -282,47 +327,83 @@ function AppContent() {
         </>
       )}
 
-      {showIntakeForm && (
-        <IntakeForm
-          editMode={!!intakeEditData}
-          candidateData={intakeEditData}
-          onClose={() => {
-            setShowIntakeForm(false);
-            setIntakeEditData(null);
+      {/* Form Designer Modal */}
+      {showFormDesigner && (
+        <FormDesigner
+          template={editingTemplate}
+          onClose={(result) => {
+            setShowFormDesigner(false);
+            setEditingTemplate(null);
+            // Refresh templates if saved
+            if (result?.success && currentView === 'templates') {
+              // Force re-render of TemplateList by toggling view
+              setCurrentView('');
+              setTimeout(() => setCurrentView('templates'), 0);
+            }
           }}
         />
       )}
 
-      {showFormBuilder && (
-        <FormBuilder
-          template={null}
-          onSave={(template) => {
-            setShowFormBuilder(false);
-          }}
-          onClose={() => setShowFormBuilder(false)}
-        />
+      {/* Response List Modal */}
+      {showResponses && (
+        <div className="modal-overlay">
+          <div className="modal-content-large">
+            <div className="modal-header">
+              <h2>Form Responses</h2>
+              <button 
+                className="close-btn"
+                onClick={() => setShowResponses(false)}
+              >
+                ×
+              </button>
+            </div>
+            <ResponseList />
+          </div>
+        </div>
       )}
 
-      {showSendForm && sendFormCase && (
-        <SendFormModal
-          caseData={sendFormCase}
-          onClose={() => {
-            setShowSendForm(false);
-            setSendFormCase(null);
-          }}
-        />
-      )}
+      {/* Toast notifications */}
+      <Toaster 
+        position="top-right"
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: '#363636',
+            color: '#fff',
+          },
+          success: {
+            style: {
+              background: 'green',
+            },
+          },
+          error: {
+            style: {
+              background: 'red',
+            },
+          },
+        }}
+      />
     </Layout>
   );
 }
 
 function App() {
   return (
-    <AuthProvider>
-      <CaseProvider>
-        <AppContent />
-      </CaseProvider>
-    </AuthProvider>
+    <Router>
+      <AuthProvider>
+        <CaseProvider>
+          <Routes>
+            <Route path="/candidate-form/:token" element={
+              <>
+                <PublicFormWrapper />
+                <Toaster position="top-right" />
+              </>
+            } />
+            <Route path="/*" element={<AppContent />} />
+          </Routes>
+        </CaseProvider>
+      </AuthProvider>
+    </Router>
   );
 }
 

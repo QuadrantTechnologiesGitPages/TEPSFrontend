@@ -1,176 +1,178 @@
 // src/modules/benchSales/services/formService.js
-const API_URL = 'http://localhost:5000/api';
+
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 class FormService {
-  // Send form to candidate
-  async sendForm(formData) {
+  // Get user email from localStorage
+  getUserEmail() {
+    return localStorage.getItem('userEmail') || 'system';
+  }
+
+  // ==================== TEMPLATE OPERATIONS ====================
+  
+  async getTemplates(includeInactive = false) {
     try {
-      const response = await fetch(`${API_URL}/forms/send`, {
-        method: 'POST',
+      const response = await fetch(`${API_BASE}/templates${includeInactive ? '?includeInactive=true' : ''}`, {
         headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(formData)
+          'x-user-email': this.getUserEmail()
+        }
       });
       
-      const data = await response.json();
+      if (!response.ok) throw new Error('Failed to fetch templates');
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching templates:', error);
+      throw error;
+    }
+  }
+
+  async getTemplateById(templateId) {
+    try {
+      const response = await fetch(`${API_BASE}/templates/${templateId}`, {
+        headers: {
+          'x-user-email': this.getUserEmail()
+        }
+      });
       
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to send form');
-      }
+      if (!response.ok) throw new Error('Template not found');
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching template:', error);
+      throw error;
+    }
+  }
+
+  async createTemplate(templateData) {
+    try {
+      const response = await fetch(`${API_BASE}/templates`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-email': this.getUserEmail()
+        },
+        body: JSON.stringify(templateData)
+      });
       
-      return data;
+      if (!response.ok) throw new Error('Failed to create template');
+      return await response.json();
+    } catch (error) {
+      console.error('Error creating template:', error);
+      throw error;
+    }
+  }
+
+  async updateTemplate(templateId, updates) {
+    try {
+      const response = await fetch(`${API_BASE}/templates/${templateId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-email': this.getUserEmail()
+        },
+        body: JSON.stringify(updates)
+      });
+      
+      if (!response.ok) throw new Error('Failed to update template');
+      return await response.json();
+    } catch (error) {
+      console.error('Error updating template:', error);
+      throw error;
+    }
+  }
+
+  async deleteTemplate(templateId) {
+    try {
+      const response = await fetch(`${API_BASE}/templates/${templateId}`, {
+        method: 'DELETE',
+        headers: {
+          'x-user-email': this.getUserEmail()
+        }
+      });
+      
+      if (!response.ok) throw new Error('Failed to delete template');
+      return await response.json();
+    } catch (error) {
+      console.error('Error deleting template:', error);
+      throw error;
+    }
+  }
+
+  // ==================== FORM SENDING ====================
+  
+  async sendForm(formData) {
+    try {
+      const response = await fetch(`${API_BASE}/templates/send-form`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-email': this.getUserEmail()
+        },
+        body: JSON.stringify({
+          ...formData,
+          senderEmail: formData.senderEmail || this.getUserEmail(),
+          senderName: formData.senderName || localStorage.getItem('userName') || 'Recruitment Team'
+        })
+      });
+      
+      if (!response.ok) throw new Error('Failed to send form');
+      return await response.json();
     } catch (error) {
       console.error('Error sending form:', error);
       throw error;
     }
   }
 
-  // Get form by token (for candidate)
-  async getForm(token) {
+  async getFormByToken(token) {
     try {
-      const response = await fetch(`${API_URL}/forms/${token}`);
-      const data = await response.json();
+      const response = await fetch(`${API_BASE}/templates/form/${token}`);
       
       if (!response.ok) {
-        throw new Error(data.error || 'Form not found');
+        if (response.status === 404) throw new Error('Form not found');
+        if (response.status === 410) throw new Error('Form has expired');
+        if (response.status === 409) throw new Error('Form already submitted');
+        throw new Error('Failed to load form');
       }
       
-      return data.form;
+      return await response.json();
     } catch (error) {
-      console.error('Error getting form:', error);
+      console.error('Error fetching form:', error);
       throw error;
     }
   }
 
-  // Submit form responses (by candidate)
-  async submitForm(token, responses) {
+  // ==================== FIELD LIBRARY ====================
+  
+  async getFieldLibrary() {
     try {
-      const response = await fetch(`${API_URL}/forms/${token}/submit`, {
+      const response = await fetch(`${API_BASE}/templates/fields/library`, {
+        headers: {
+          'x-user-email': this.getUserEmail()
+        }
+      });
+      
+      if (!response.ok) throw new Error('Failed to fetch field library');
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching field library:', error);
+      throw error;
+    }
+  }
+
+  async addFieldToLibrary(fieldData) {
+    try {
+      const response = await fetch(`${API_BASE}/templates/fields/library`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'x-user-email': this.getUserEmail()
         },
-        body: JSON.stringify({ responses })
+        body: JSON.stringify(fieldData)
       });
       
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to submit form');
-      }
-      
-      return data;
+      if (!response.ok) throw new Error('Failed to add field');
+      return await response.json();
     } catch (error) {
-      console.error('Error submitting form:', error);
-      throw error;
-    }
-  }
-
-  // Get form status
-  async getFormStatus(token) {
-    try {
-      const response = await fetch(`${API_URL}/forms/${token}/status`);
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to get status');
-      }
-      
-      return data.status;
-    } catch (error) {
-      console.error('Error getting form status:', error);
-      throw error;
-    }
-  }
-
-  // Get forms by case ID
-  async getFormsByCase(caseId) {
-    try {
-      const response = await fetch(`${API_URL}/forms/case/${caseId}`);
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to get forms');
-      }
-      
-      return data.forms;
-    } catch (error) {
-      console.error('Error getting case forms:', error);
-      throw error;
-    }
-  }
-
-  // Get form responses
-  async getFormResponses(token) {
-    try {
-      const response = await fetch(`${API_URL}/forms/${token}/responses`);
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'No responses found');
-      }
-      
-      return data.responses;
-    } catch (error) {
-      console.error('Error getting responses:', error);
-      throw error;
-    }
-  }
-
-  // Resend form email
-  async resendForm(token) {
-    try {
-      const response = await fetch(`${API_URL}/forms/${token}/resend`, {
-        method: 'POST'
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to resend form');
-      }
-      
-      return data;
-    } catch (error) {
-      console.error('Error resending form:', error);
-      throw error;
-    }
-  }
-
-  // Check for responses manually
-  async checkResponses(caseId) {
-    try {
-      const response = await fetch(`${API_URL}/forms/check-responses/${caseId}`, {
-        method: 'POST'
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to check responses');
-      }
-      
-      return data.result;
-    } catch (error) {
-      console.error('Error checking responses:', error);
-      throw error;
-    }
-  }
-
-  // Get all pending forms
-  async getPendingForms() {
-    try {
-      const response = await fetch(`${API_URL}/forms/pending/all`);
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to get pending forms');
-      }
-      
-      return data.forms;
-    } catch (error) {
-      console.error('Error getting pending forms:', error);
+      console.error('Error adding field to library:', error);
       throw error;
     }
   }

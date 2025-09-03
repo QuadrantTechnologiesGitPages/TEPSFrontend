@@ -6,19 +6,22 @@ import ActiveCases from './ActiveCases';
 import QuickActions from './QuickActions';
 import '../../styles/Dashboard.css';
 
-const BenchSalesDashboard = () => {
+const BenchSalesDashboard = ({ onQuickAction }) => {
   const { user } = useAuth();
   const [metrics, setMetrics] = useState({
     activeCases: 0,
     pendingVerification: 0,
     todayFollowups: 0,
-    weeklySubmissions: 0
+    weeklySubmissions: 0,
+    unreadResponses: 0  // New metric for form responses
   });
   const [activeCases, setActiveCases] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadDashboardData();
+    // Check for form responses
+    checkFormResponses();
   }, []);
 
   const loadDashboardData = () => {
@@ -35,12 +38,13 @@ const BenchSalesDashboard = () => {
       c.nextFollowup && new Date(c.nextFollowup).toDateString() === today
     ).length;
     
-    setMetrics({
+    setMetrics(prev => ({
+      ...prev,
       activeCases: active,
       pendingVerification: pending,
       todayFollowups: followups,
-      weeklySubmissions: 0 // Will implement later
-    });
+      weeklySubmissions: 0
+    }));
     
     // Get active cases for display
     const myCases = storedCases
@@ -53,10 +57,41 @@ const BenchSalesDashboard = () => {
     setLoading(false);
   };
 
+  const checkFormResponses = async () => {
+    try {
+      // Check for unread responses from the backend
+      const response = await fetch('/api/responses?processed=false', {
+        headers: {
+          'x-user-email': user?.email || 'system'
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setMetrics(prev => ({
+          ...prev,
+          unreadResponses: data.count || 0
+        }));
+      }
+    } catch (error) {
+      console.log('Could not fetch response count');
+    }
+  };
+
   const handleQuickAction = (action) => {
+    // If onQuickAction prop is provided (from App.js), use it
+    if (onQuickAction) {
+      onQuickAction(action);
+      return;
+    }
+    
+    // Otherwise, handle internally
     switch(action) {
       case 'newIntake':
-        window.dispatchEvent(new CustomEvent('navigate', { detail: { view: 'intake' }}));
+        window.dispatchEvent(new CustomEvent('navigate', { detail: { view: 'formDesigner' }}));
+        break;
+      case 'viewResponses':
+        window.dispatchEvent(new CustomEvent('navigate', { detail: { view: 'responses' }}));
         break;
       case 'searchCandidate':
         window.dispatchEvent(new CustomEvent('navigate', { detail: { view: 'search' }}));
@@ -64,10 +99,59 @@ const BenchSalesDashboard = () => {
       case 'viewAllCases':
         window.dispatchEvent(new CustomEvent('navigate', { detail: { view: 'cases' }}));
         break;
+      case 'templates':
+        window.dispatchEvent(new CustomEvent('navigate', { detail: { view: 'templates' }}));
+        break;
+      case 'pendingVerifications':
+        // Filter to show only pending verifications
+        window.dispatchEvent(new CustomEvent('navigate', { 
+          detail: { 
+            view: 'cases',
+            filter: 'pendingVerification'
+          }
+        }));
+        break;
       default:
         console.log('Action:', action);
     }
   };
+
+  // Set up WebSocket for real-time notifications
+  useEffect(() => {
+    if (!user?.email) return;
+    
+    // Connect to WebSocket for real-time updates
+    const ws = new WebSocket(`ws://localhost:5000/ws`);
+    
+    ws.onopen = () => {
+      // Register user for notifications
+      ws.send(JSON.stringify({
+        type: 'register',
+        userEmail: user.email
+      }));
+    };
+    
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      
+      if (data.type === 'form_response') {
+        // Update unread responses count
+        setMetrics(prev => ({
+          ...prev,
+          unreadResponses: prev.unreadResponses + 1
+        }));
+        
+        // Show notification (if you have a notification system)
+        console.log('New form response received:', data);
+      }
+    };
+    
+    return () => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
+    };
+  }, [user?.email]);
 
   if (loading) {
     return (
@@ -83,6 +167,11 @@ const BenchSalesDashboard = () => {
       <div className="dashboard-header">
         <h1>Bench Sales Dashboard</h1>
         <p>Welcome back, {user?.name || user?.email?.split('@')[0]}</p>
+        {metrics.unreadResponses > 0 && (
+          <div className="alert-banner">
+            🔔 You have {metrics.unreadResponses} unread form responses
+          </div>
+        )}
       </div>
 
       <DashboardMetrics metrics={metrics} />
@@ -101,6 +190,14 @@ const BenchSalesDashboard = () => {
           <div className="recent-activity">
             <h3>Recent Activity</h3>
             <div className="activity-list">
+              {metrics.unreadResponses > 0 && (
+                <div className="activity-item highlight">
+                  <span className="activity-time">New</span>
+                  <span className="activity-text">
+                    {metrics.unreadResponses} form response(s) waiting
+                  </span>
+                </div>
+              )}
               <div className="activity-item">
                 <span className="activity-time">2 mins ago</span>
                 <span className="activity-text">Case #1234 status updated</span>

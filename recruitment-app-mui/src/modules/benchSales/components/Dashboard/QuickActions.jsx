@@ -5,9 +5,16 @@ const QuickActions = ({ onAction }) => {
   const actions = [
     {
       id: 'newIntake',
-      label: 'New Candidate Intake',
-      icon: '➕',
+      label: 'Design & Send Form',
+      icon: '📝',
       primary: true
+    },
+    {
+      id: 'viewResponses', 
+      label: 'View Responses',
+      icon: '📥',
+      primary: true,
+      badge: null // Could add count of unread responses
     },
     {
       id: 'searchCandidate',
@@ -19,6 +26,12 @@ const QuickActions = ({ onAction }) => {
       id: 'viewAllCases',
       label: 'View All Cases',
       icon: '📋',
+      primary: false
+    },
+    {
+      id: 'templates',
+      label: 'Form Templates',
+      icon: '📄',
       primary: false
     },
     {
@@ -41,6 +54,9 @@ const QuickActions = ({ onAction }) => {
           >
             <span style={{ marginRight: '8px' }}>{action.icon}</span>
             {action.label}
+            {action.badge && (
+              <span className="action-badge">{action.badge}</span>
+            )}
           </button>
         ))}
       </div>
@@ -48,7 +64,10 @@ const QuickActions = ({ onAction }) => {
       <div className="shortcuts-info">
         <h4>Keyboard Shortcuts</h4>
         <div className="shortcut-item">
-          <kbd>Alt + N</kbd> New Intake
+          <kbd>Alt + N</kbd> New Form
+        </div>
+        <div className="shortcut-item">
+          <kbd>Alt + R</kbd> Responses
         </div>
         <div className="shortcut-item">
           <kbd>Alt + S</kbd> Search

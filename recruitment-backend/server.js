@@ -1,28 +1,28 @@
-// recruitment-backend/server.js - UPDATED COMPLETE VERSION
+// recruitment-backend/server.js - UPDATED FOR NEW FORM SYSTEM
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const http = require('http');
 const socketIo = require('socket.io');
-const cron = require('node-cron');
 
 // Load environment variables
 dotenv.config();
 
-// Import database and services
+// Import database
 const database = require('./utils/database');
-const pollingService = require('./services/pollingService');
 
 // Import routes
 const authRoutes = require('./routes/auth.routes');
 const formRoutes = require('./routes/form.routes');
 const webhookRoutes = require('./routes/webhook.routes');
+const formTemplateRoutes = require('./routes/formTemplate.routes');
+const responseRoutes = require('./routes/response.routes');
 
 // Initialize Express app
 const app = express();
 const server = http.createServer(app);
 
-// Initialize Socket.io
+// Initialize Socket.io for real-time notifications
 const io = socketIo(server, {
   cors: {
     origin: process.env.FRONTEND_URL || 'http://localhost:3000',
@@ -30,7 +30,7 @@ const io = socketIo(server, {
   }
 });
 
-// Make io globally available
+// Make io globally available for notifications
 global.io = io;
 
 // Middleware
@@ -62,12 +62,14 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/forms', formRoutes);
 app.use('/api/webhooks', webhookRoutes);
+app.use('/api/templates', formTemplateRoutes);
+app.use('/api/responses', responseRoutes);
 
-// Static route for testing
-app.get('/', (req, res) => {
+// API Documentation endpoint
+app.get('/api', (req, res) => {
   res.json({
     message: 'Recruitment Backend API',
-    version: '1.0.0',
+    version: '2.0.0',
     endpoints: {
       auth: {
         google: 'GET /api/auth/google',
@@ -75,112 +77,130 @@ app.get('/', (req, res) => {
         microsoft: 'GET /api/auth/microsoft',
         microsoftCallback: 'GET /api/auth/microsoft/callback',
         status: 'GET /api/auth/status/:email',
-        refresh: 'POST /api/auth/refresh',
         verify: 'POST /api/auth/verify'
+      },
+      templates: {
+        create: 'POST /api/templates',
+        list: 'GET /api/templates',
+        get: 'GET /api/templates/:id',
+        update: 'PUT /api/templates/:id',
+        delete: 'DELETE /api/templates/:id'
       },
       forms: {
         send: 'POST /api/forms/send',
         get: 'GET /api/forms/:token',
-        submit: 'POST /api/forms/:token/submit',
-        status: 'GET /api/forms/:token/status',
-        responses: 'GET /api/forms/:token/responses',
-        resend: 'POST /api/forms/:token/resend',
-        byCase: 'GET /api/forms/case/:caseId',
-        checkResponses: 'POST /api/forms/check-responses/:caseId',
-        pending: 'GET /api/forms/pending/all'
+        publicForm: 'GET /api/forms/public/:token'
       },
-      webhooks: {
-        gmail: 'POST /api/webhooks/gmail',
-        outlook: 'POST /api/webhooks/outlook',
-        formSubmission: 'POST /api/webhooks/form-submission',
-        sendgrid: 'POST /api/webhooks/sendgrid',
-        status: 'POST /api/webhooks/status',
-        register: 'POST /api/webhooks/register',
-        verify: 'GET /api/webhooks/verify'
+      responses: {
+        submit: 'POST /api/responses/submit',
+        list: 'GET /api/responses',
+        get: 'GET /api/responses/:id',
+        process: 'POST /api/responses/:id/process',
+        createCandidate: 'POST /api/responses/:id/create-candidate'
+      },
+      notifications: {
+        unread: 'GET /api/notifications/unread',
+        markRead: 'POST /api/notifications/:id/read',
+        websocket: 'WS /ws - Real-time notifications'
       }
     }
   });
 });
 
-// ==================== WEBSOCKET ====================
+// ==================== WEBSOCKET FOR NOTIFICATIONS ====================
+
+// Track connected users
+const connectedUsers = new Map();
 
 io.on('connection', (socket) => {
   console.log('🔌 New client connected:', socket.id);
 
-  // Join user to their room
-  socket.on('join', (userId) => {
-    socket.join(`user-${userId}`);
-    console.log(`User ${userId} joined their room`);
+  // Register user for notifications
+  socket.on('register', (userEmail) => {
+    connectedUsers.set(socket.id, userEmail);
+    socket.join(`user-${userEmail}`);
+    console.log(`📧 User ${userEmail} registered for notifications`);
+    
+    // Send any unread notifications
+    sendUnreadNotifications(socket, userEmail);
   });
 
-  // Join case room for real-time updates
-  socket.on('subscribeToCase', (caseId) => {
-    socket.join(`case-${caseId}`);
-    console.log(`Socket ${socket.id} subscribed to case ${caseId}`);
-  });
-
-  // Unsubscribe from case
-  socket.on('unsubscribeFromCase', (caseId) => {
-    socket.leave(`case-${caseId}`);
-    console.log(`Socket ${socket.id} unsubscribed from case ${caseId}`);
-  });
-
-  // Manual form check request
-  socket.on('checkFormStatus', async (data) => {
-    try {
-      const { token } = data;
-      const form = await database.getFormByToken(token);
+  // Handle form response notification
+  socket.on('formResponseReceived', async (data) => {
+    const { formToken, candidateEmail, candidateName } = data;
+    
+    // Get form details to find the sender
+    const form = await database.getFormByToken(formToken);
+    if (form && form.sender_email) {
+      // Create notification in database
+      await database.createNotification({
+        userEmail: form.sender_email,
+        type: 'form_response',
+        title: 'New Form Response',
+        message: `${candidateName || candidateEmail} has submitted their form`,
+        data: { formToken, candidateEmail, candidateName },
+        priority: 'high',
+        actionUrl: `/responses/${formToken}`
+      });
       
-      if (form) {
-        socket.emit('formStatusUpdate', {
-          token,
-          status: form.status,
-          completedDate: form.completed_date
-        });
-      }
-    } catch (error) {
-      console.error('Error checking form status:', error);
-      socket.emit('error', { message: 'Failed to check form status' });
+      // Send real-time notification to the BSM user
+      io.to(`user-${form.sender_email}`).emit('notification', {
+        type: 'form_response',
+        title: 'New Form Response!',
+        message: `${candidateName || candidateEmail} has submitted their form`,
+        timestamp: new Date().toISOString(),
+        priority: 'high',
+        data: { formToken, candidateEmail }
+      });
+      
+      console.log(`📬 Notification sent to ${form.sender_email}`);
     }
   });
 
   // Handle disconnection
   socket.on('disconnect', () => {
-    console.log('🔌 Client disconnected:', socket.id);
+    const userEmail = connectedUsers.get(socket.id);
+    if (userEmail) {
+      console.log(`📴 User ${userEmail} disconnected`);
+      connectedUsers.delete(socket.id);
+    }
   });
 });
 
-// ==================== SCHEDULED TASKS ====================
-
-// Schedule email polling (every minute by default)
-const pollingInterval = process.env.POLLING_INTERVAL || '*/1 * * * *';
-
-cron.schedule(pollingInterval, () => {
-  console.log('⏰ Running scheduled email check...');
-  pollingService.checkForResponses().catch(console.error);
-});
-
-// Schedule cleanup of expired forms (daily at 2 AM)
-cron.schedule('0 2 * * *', async () => {
-  console.log('🧹 Running daily cleanup...');
-  
+// Send unread notifications when user connects
+async function sendUnreadNotifications(socket, userEmail) {
   try {
-    // Clean up forms older than 30 days
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
-    await database.run(
-      `DELETE FROM forms 
-       WHERE created_date < ? 
-       AND status != 'completed'`,
-      [thirtyDaysAgo.toISOString()]
-    );
-    
-    console.log('✅ Cleanup completed');
+    const unreadNotifications = await database.getUnreadNotifications(userEmail);
+    if (unreadNotifications.length > 0) {
+      socket.emit('unreadNotifications', unreadNotifications);
+      console.log(`📨 Sent ${unreadNotifications.length} unread notifications to ${userEmail}`);
+    }
   } catch (error) {
-    console.error('Cleanup error:', error);
+    console.error('Error fetching unread notifications:', error);
   }
-});
+}
+
+// ==================== NOTIFICATION HELPER ====================
+
+// Global function to send notification (can be called from anywhere)
+global.sendNotification = async (userEmail, notification) => {
+  // Save to database
+  await database.createNotification({
+    userEmail,
+    type: notification.type,
+    title: notification.title,
+    message: notification.message,
+    data: notification.data,
+    priority: notification.priority || 'normal',
+    actionUrl: notification.actionUrl
+  });
+  
+  // Send real-time if user is connected
+  io.to(`user-${userEmail}`).emit('notification', {
+    ...notification,
+    timestamp: new Date().toISOString()
+  });
+};
 
 // ==================== ERROR HANDLING ====================
 
@@ -219,9 +239,6 @@ process.on('SIGINT', gracefulShutdown);
 async function gracefulShutdown(signal) {
   console.log(`\n${signal} received. Starting graceful shutdown...`);
   
-  // Stop polling service
-  pollingService.stop();
-  
   // Close socket connections
   io.close(() => {
     console.log('Socket.io connections closed');
@@ -250,13 +267,7 @@ async function startServer() {
   try {
     // Connect to database
     await database.connect();
-    console.log('✅ Database initialized');
-    
-    // Start polling service
-    if (process.env.ENABLE_POLLING !== 'false') {
-      pollingService.start();
-      console.log('✅ Polling service started');
-    }
+    console.log('✅ Database initialized with new tables');
     
     // Start server
     const PORT = process.env.PORT || 5000;
@@ -267,7 +278,7 @@ async function startServer() {
 ========================================
 📍 URL: http://localhost:${PORT}
 📊 Environment: ${process.env.NODE_ENV || 'development'}
-🔄 Polling: ${process.env.ENABLE_POLLING !== 'false' ? 'Enabled' : 'Disabled'}
+🔔 Notifications: WebSocket Enabled
 🌐 Frontend: ${process.env.FRONTEND_URL || 'http://localhost:3000'}
 ========================================
       `);
