@@ -243,7 +243,7 @@ const ResponseList = () => {
                   <h3>{displayName}</h3>
                   <div className="badges">
                     {!response.processed && <span className="badge new">New</span>}
-                    {response.case_created && <span className="badge case">Case Created</span>}
+                    {!!response.case_created && <span className="badge case">Case Created</span>}
                   </div>
                 </div>
                 
