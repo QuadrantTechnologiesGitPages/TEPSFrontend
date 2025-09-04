@@ -14,30 +14,58 @@ const EmailComposer = ({ template, candidate, onClose }) => {
     generateFormAndEmail();
   }, []);
 
-const generateFormAndEmail = async () => {
-  setIsLoading(true);
-  try {
-    const data = await formService.sendForm({
-      templateId: template.id || 1,
-      candidateEmail: candidate.email,
-      candidateName: candidate.name || candidate.email.split('@')[0],
-      caseId: candidate.caseId
-    });
-    
-    if (data.success) {
-      setEmailContent(data.emailContent);
-      setFormUrl(data.formUrl);
-      setMailtoLink(data.mailtoLink);
-    } else {
-      throw new Error(data.error);
+  const generateFormAndEmail = async () => {
+    setIsLoading(true);
+    try {
+      // Make sure we have a valid template ID
+      let templateId = template?.id;
+      
+      // If no template ID but we have fields, we need to save the template first
+      if (!templateId && template?.fields && template.fields.length > 0) {
+        console.log('No template ID, creating template first...');
+        const saveResult = await formService.createTemplate({
+          name: template.name || 'Untitled Form',
+          description: template.description || '',
+          fields: template.fields
+        });
+        
+        if (saveResult.success) {
+          templateId = saveResult.templateId;
+          console.log('Template created with ID:', templateId);
+        } else {
+          throw new Error('Failed to create template');
+        }
+      }
+      
+      // If STILL no template ID, use the default
+      if (!templateId) {
+        console.warn('No template available, using default template ID: 1');
+        templateId = 1; // This should be the default template in your DB
+      }
+      
+      console.log('Sending form with template ID:', templateId);
+      
+      const data = await formService.sendForm({
+        templateId: templateId,
+        candidateEmail: candidate.email,
+        candidateName: candidate.name || candidate.email.split('@')[0],
+        caseId: candidate.caseId
+      });
+      
+      if (data.success) {
+        setEmailContent(data.emailContent);
+        setFormUrl(data.formUrl);
+        setMailtoLink(data.mailtoLink);
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (error) {
+      toast.error('Failed to generate form: ' + error.message);
+      onClose();
+    } finally {
+      setIsLoading(false);
     }
-  } catch (error) {
-    toast.error('Failed to generate form: ' + error.message);
-    onClose();
-  } finally {
-    setIsLoading(false);
-  }
-};
+  };
 
   const openEmailClient = () => {
     window.location.href = mailtoLink;

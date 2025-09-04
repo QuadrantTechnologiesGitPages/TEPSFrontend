@@ -59,20 +59,34 @@ class ResponseService {
         candidateEmail
       );
       
-      // Send confirmation email to candidate
-      await emailService.sendSubmissionConfirmation({
-        candidateEmail,
-        candidateName,
-        submittedAt: new Date().toISOString()
-      });
+      // Try to send confirmation email if the method exists
+      if (emailService.sendSubmissionConfirmation) {
+        try {
+          await emailService.sendSubmissionConfirmation({
+            candidateEmail,
+            candidateName,
+            submittedAt: new Date().toISOString()
+          });
+        } catch (emailError) {
+          console.log('Could not send confirmation email:', emailError.message);
+          // Don't throw - let the submission succeed even if email fails
+        }
+      }
       
-      // Send notification to BSM user
-      await emailService.sendResponseNotification({
-        bsmEmail: form.sender_email,
-        candidateName,
-        candidateEmail,
-        responseId: result.id
-      });
+      // Try to send notification to BSM user if the method exists
+      if (emailService.sendResponseNotification) {
+        try {
+          await emailService.sendResponseNotification({
+            bsmEmail: form.sender_email,
+            candidateName,
+            candidateEmail,
+            responseId: result.id
+          });
+        } catch (emailError) {
+          console.log('Could not send notification email:', emailError.message);
+          // Don't throw - let the submission succeed even if email fails
+        }
+      }
       
       // Send real-time notification via WebSocket
       if (global.io) {
@@ -105,7 +119,8 @@ class ResponseService {
       return {
         success: true,
         message: 'Form submitted successfully',
-        responseId: result.id
+        responseId: result.id,
+        id: result.id // Add this for frontend compatibility
       };
     } catch (error) {
       console.error('Error submitting response:', error);

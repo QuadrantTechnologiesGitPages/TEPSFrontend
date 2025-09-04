@@ -23,47 +23,49 @@ const PublicCandidateForm = () => {
     }
   }, [token]);
 
-const loadFormData = async () => {
-  try {
-    setLoading(true);
-    
-    // Check if this form was already submitted (stored in localStorage)
-    const submittedForms = JSON.parse(localStorage.getItem('submitted_forms') || '[]');
-    if (submittedForms.includes(token)) {
-      setSubmitted(true);
-      setLoading(false);
-      return;
-    }
-    
-    const response = await formService.getFormByToken(token);
-    
-    if (response.success && response.form) {
-      setFormConfig(response.form);
+  const loadFormData = async () => {
+    try {
+      setLoading(true);
       
-      // Initialize form data
-      const initialData = {};
-      response.form.fields.forEach(field => {
-        initialData[field.id] = '';
-      });
-      setFormData(initialData);
-    } else {
-      setError(response.error || 'Failed to load form');
+      // Check if this form was already submitted (stored in localStorage)
+      const submittedForms = JSON.parse(localStorage.getItem('submitted_forms') || '[]');
+      if (submittedForms.includes(token)) {
+        setSubmitted(true);
+        setShowSuccess(true);
+        setLoading(false);
+        return;
+      }
+      
+      const response = await formService.getFormByToken(token);
+      
+      if (response.success && response.form) {
+        setFormConfig(response.form);
+        
+        // Initialize form data
+        const initialData = {};
+        response.form.fields.forEach(field => {
+          initialData[field.id] = '';
+        });
+        setFormData(initialData);
+      } else {
+        setError(response.error || 'Failed to load form');
+      }
+    } catch (err) {
+      console.error('Error loading form:', err);
+      if (err.message === 'Form not found') {
+        setError('Invalid or expired form link');
+      } else if (err.message === 'Form has expired') {
+        setError('This form link has expired');
+      } else if (err.message === 'Form already submitted' || err.message === 'Form has already been submitted') {
+        setSubmitted(true);
+        setShowSuccess(true);
+      } else {
+        setError('Error loading form. Please try again.');
+      }
+    } finally {
+      setLoading(false);
     }
-  } catch (err) {
-    console.error('Error loading form:', err);
-    if (err.message === 'Form not found') {
-      setError('Invalid or expired form link');
-    } else if (err.message === 'Form has expired') {
-      setError('This form link has expired');
-    } else if (err.message === 'Form already submitted') {
-      setSubmitted(true); // Show success message instead of error
-    } else {
-      setError('Error loading form. Please try again.');
-    }
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const handleFieldChange = (fieldId, value) => {
     setFormData({ ...formData, [fieldId]: value });
@@ -111,7 +113,7 @@ const loadFormData = async () => {
 
   const handleSave = () => {
     setSaving(true);
-    // In a real implementation, you might want to save to localStorage or sessionStorage
+    // Save to localStorage
     localStorage.setItem(`form_progress_${token}`, JSON.stringify(formData));
     setTimeout(() => {
       setSaving(false);
@@ -119,48 +121,52 @@ const loadFormData = async () => {
     }, 500);
   };
 
-const handleSubmit = async () => {
-  if (!validateForm()) {
-    // Show specific field errors instead of generic alert
-    const firstError = Object.values(errors)[0];
-    setShowSuccess(false);
-    // Scroll to first error field
-    const firstErrorField = document.querySelector('.error');
-    if (firstErrorField) {
-      firstErrorField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  const handleSubmit = async () => {
+    if (!validateForm()) {
+      // Scroll to first error field
+      const firstErrorField = document.querySelector('.error');
+      if (firstErrorField) {
+        firstErrorField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return;
     }
-    return;
-  }
 
-  try {
-    setSubmitting(true);
-    
-    const result = await responseService.submitResponse(token, formData);
-    
-    if (result.success) {
-      // Store that this form was submitted
-      const submittedForms = JSON.parse(localStorage.getItem('submitted_forms') || '[]');
-      submittedForms.push(token);
-      localStorage.setItem('submitted_forms', JSON.stringify(submittedForms));
+    try {
+      setSubmitting(true);
       
-      // Clear saved progress
-      localStorage.removeItem(`form_progress_${token}`);
+      const result = await responseService.submitResponse(token, formData);
       
-      // Show success with animation
-      setSubmitted(true);
-      setShowSuccess(true);
-    } else {
-      throw new Error(result.error || 'Failed to submit form');
+      console.log('Submission result:', result); // Debug log
+      
+      // Check if submission was successful
+      if (result && (result.success || result.id)) {
+        // Store that this form was submitted
+        const submittedForms = JSON.parse(localStorage.getItem('submitted_forms') || '[]');
+        submittedForms.push(token);
+        localStorage.setItem('submitted_forms', JSON.stringify(submittedForms));
+        
+        // Clear saved progress
+        localStorage.removeItem(`form_progress_${token}`);
+        
+        // Show success immediately
+        setSubmitted(true);
+        setShowSuccess(true);
+        
+        // Force a re-render by clearing form config
+        setFormConfig(null);
+        
+        console.log('Form submitted successfully, showing success message');
+      } else {
+        throw new Error(result?.error || 'Failed to submit form');
+      }
+    } catch (err) {
+      console.error('Error submitting form:', err);
+      setError(err.message || 'Error submitting form. Please try again.');
+      setTimeout(() => setError(''), 5000); // Clear error after 5 seconds
+    } finally {
+      setSubmitting(false);
     }
-  } catch (err) {
-    console.error('Error submitting form:', err);
-    // Show inline error instead of alert
-    setError(err.message || 'Error submitting form. Please try again.');
-    setTimeout(() => setError(''), 5000); // Clear error after 5 seconds
-  } finally {
-    setSubmitting(false);
-  }
-};
+  };
 
   const renderField = (field) => {
     switch(field.type) {
@@ -298,7 +304,7 @@ const handleSubmit = async () => {
     );
   }
 
-  if (error) {
+  if (error && !submitted) {
     return (
       <div className="public-form-container">
         <div className="error-message">
@@ -309,36 +315,35 @@ const handleSubmit = async () => {
     );
   }
 
-if (submitted) {
-  return (
-    <div className="public-form-container">
-      <div className={`success-message ${showSuccess ? 'animate-in' : ''}`}>
-        <div className="success-icon">
-          <svg width="80" height="80" viewBox="0 0 80 80">
-            <circle cx="40" cy="40" r="38" stroke="#4CAF50" strokeWidth="2" fill="none"/>
-            <path d="M20 40 L32 52 L60 24" stroke="#4CAF50" strokeWidth="3" fill="none" 
-                  strokeLinecap="round" strokeLinejoin="round"
-                  className="checkmark"/>
-          </svg>
+  if (submitted) {
+    return (
+      <div className="public-form-container">
+        <div className={`success-message ${showSuccess ? 'animate-in' : ''}`}>
+          <div className="success-icon">
+            <svg width="80" height="80" viewBox="0 0 80 80">
+              <circle cx="40" cy="40" r="38" stroke="#4CAF50" strokeWidth="2" fill="none"/>
+              <path d="M20 40 L32 52 L60 24" stroke="#4CAF50" strokeWidth="3" fill="none" 
+                    strokeLinecap="round" strokeLinejoin="round"
+                    className="checkmark"/>
+            </svg>
+          </div>
+          <h2>Thank You!</h2>
+          <p className="main-message">Your information has been submitted successfully.</p>
+          <div className="next-steps">
+            <h3>What happens next?</h3>
+            <ul>
+              <li>Our team will review your information within 24-48 hours</li>
+              <li>You'll receive a confirmation email at the address you provided</li>
+              <li>A recruiter will contact you if your profile matches our requirements</li>
+            </ul>
+          </div>
+          <p className="contact-info">
+            If you have any questions, please contact your recruiter or email us at recruitment@company.com
+          </p>
         </div>
-        <h2>Thank You!</h2>
-        <p className="main-message">Your information has been submitted successfully.</p>
-        <div className="next-steps">
-          <h3>What happens next?</h3>
-          <ul>
-            <li>Our team will review your information within 24-48 hours</li>
-            <li>You'll receive a confirmation email at the address you provided</li>
-            <li>A recruiter will contact you if your profile matches our requirements</li>
-          </ul>
-        </div>
-        <p className="contact-info">
-          If you have any questions, please contact your recruiter or email us at recruitment@company.com
-        </p>
       </div>
-    </div>
-  );
-}
-
+    );
+  }
 
   return (
     <div className="public-form-container">
@@ -361,13 +366,12 @@ if (submitted) {
                 <span className="error-message">{errors[field.id]}</span>
               )}
             </div>
-
           ))}
           {error && !loading && (
-          <div className="inline-error">
-            <span>⚠️ {error}</span>
-          </div>
-        )}
+            <div className="inline-error">
+              <span>⚠️ {error}</span>
+            </div>
+          )}
         </div>
 
         <div className="form-footer">

@@ -188,16 +188,20 @@ class FormTemplateService {
         senderEmail
       } = data;
       
+      console.log('generateForm - Template ID:', templateId); // Debug log
+      
       // Get template
       const template = await this.getTemplateById(templateId);
       if (!template || !template.is_active) {
         throw new Error('Template not found or inactive');
       }
       
+      console.log('Using template:', template.name, 'with', template.fields?.length, 'fields');
+      
       // Generate unique token
       const token = this.generateFormToken();
       
-      // Create form record
+      // Create form record with template fields
       await database.createForm({
         token,
         templateId,
@@ -205,7 +209,7 @@ class FormTemplateService {
         candidateEmail,
         candidateName: candidateName || candidateEmail.split('@')[0],
         senderEmail,
-        fields: template.fields
+        fields: template.fields // Use the template's fields
       });
       
       // Update template usage count
@@ -226,7 +230,7 @@ class FormTemplateService {
       return {
         success: true,
         token,
-        formUrl: `${process.env.FRONTEND_URL}/candidate-form/${token}`,
+        formUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/candidate-form/${token}`,
         template: template.name
       };
     } catch (error) {
@@ -235,8 +239,6 @@ class FormTemplateService {
     }
   }
   
-// Add this method to formTemplateService.js after generateForm method
-
   /**
    * Send form to candidate (prepare mailto link)
    */
@@ -251,16 +253,21 @@ class FormTemplateService {
         senderName
       } = data;
       
-      // Get template
+      console.log('sendForm - Received template ID:', templateId); // Debug log
+      
+      // Get template - Make sure we're getting the right one
       const template = await this.getTemplateById(templateId);
       if (!template || !template.is_active) {
+        console.error('Template not found or inactive. Template ID:', templateId);
         throw new Error('Template not found or inactive');
       }
+      
+      console.log('Using template:', template.name, 'with fields:', template.fields?.length);
       
       // Generate unique token
       const token = this.generateFormToken();
       
-      // Create form record
+      // Create form record with the correct template fields
       await database.createForm({
         token,
         templateId,
@@ -268,7 +275,7 @@ class FormTemplateService {
         candidateEmail,
         candidateName: candidateName || candidateEmail.split('@')[0],
         senderEmail,
-        fields: template.fields
+        fields: template.fields // Use the template's fields, not default
       });
       
       // Update template usage count
@@ -313,7 +320,6 @@ class FormTemplateService {
     }
   }
 
-
   /**
    * Get form by token (for candidate to view)
    */
@@ -349,9 +355,10 @@ class FormTemplateService {
         );
       }
       
+      // Return the form with its fields
       return {
         token: form.token,
-        fields: form.fields,
+        fields: form.fields, // These should be the template's fields
         candidateEmail: form.candidate_email,
         candidateName: form.candidate_name,
         expiresAt: form.expires_at
@@ -397,8 +404,8 @@ class FormTemplateService {
         throw new Error(`Invalid field type: ${field.type}`);
       }
       
-      // Validate select/radio fields have options
-      if ((field.type === 'select' || field.type === 'radio') && !field.options) {
+      // Validate select/radio/checkbox fields have options
+      if (['select', 'radio', 'checkbox'].includes(field.type) && !field.options) {
         throw new Error(`Field ${field.label} must have options`);
       }
     });
