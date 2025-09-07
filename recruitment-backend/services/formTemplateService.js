@@ -18,7 +18,7 @@ class FormTemplateService {
         name: templateData.name,
         description: templateData.description,
         fields: templateData.fields,
-        createdBy: createdBy
+        created_by: createdBy
       });
       
       // Log activity
@@ -202,14 +202,15 @@ class FormTemplateService {
       const token = this.generateFormToken();
       
       // Create form record with template fields
-      await database.createFormTemplate({
+      await database.createForm({
         token,
-        templateId,
-        caseId,
-        candidateEmail,
-        candidateName: candidateName || candidateEmail.split('@')[0],
-        senderEmail,
-        fields: template.fields // Use the template's fields
+        template_id: templateId,
+        case_id: caseId,
+        candidate_email: candidateEmail,
+        candidate_name: candidateName || candidateEmail.split('@')[0],
+        sender_email: senderEmail,
+        fields: template.fields, // Use the template's fields
+        expires_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString() // 14 days from now
       });
       
       // Update template usage count
@@ -268,14 +269,15 @@ class FormTemplateService {
       const token = this.generateFormToken();
       
       // Create form record with the correct template fields
-      await database.createFormTemplate({
+      await database.createForm({
         token,
-        templateId,
-        caseId,
-        candidateEmail,
-        candidateName: candidateName || candidateEmail.split('@')[0],
-        senderEmail,
-        fields: template.fields // Use the template's fields, not default
+        template_id: templateId,
+        case_id: caseId,
+        candidate_email: candidateEmail,
+        candidate_name: candidateName || candidateEmail.split('@')[0],
+        sender_email: senderEmail,
+        fields: template.fields, // Use the template's fields, not default
+        expires_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString() // 14 days from now
       });
       
       // Update template usage count

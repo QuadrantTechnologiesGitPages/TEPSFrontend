@@ -60,7 +60,8 @@ class Database {
           response_data TEXT,
           email_message_id TEXT,
           email_thread_id TEXT,
-          expires_at DATETIME
+          expires_at DATETIME,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )`);
 
         // Email tracking table
@@ -224,6 +225,13 @@ class Database {
         )`, (err) => {
           if (err) console.error('Error creating candidate_activities table:', err);
           
+          // Add updated_at column to forms table if it doesn't exist
+          this.db.run(`ALTER TABLE forms ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP`, (err) => {
+            if (err && !err.message.includes('duplicate column name')) {
+              console.error('Error adding updated_at column to forms table:', err);
+            }
+          });
+          
           // Create default form template after all tables are created
           this.createDefaultTemplate();
           console.log('✅ Database initialized with candidates table');
@@ -290,12 +298,10 @@ class Database {
       ], function(err) {
         if (err) reject(err);
         else {
-          // Get the newly created template
-          this.getFormTemplateById(this.lastID)
-            .then(resolve)
-            .catch(reject);
+          // Return the correct structure expected by formTemplateService
+          resolve({ id: this.lastID });
         }
-      }.bind(this));
+      });
     });
   }
 
@@ -510,6 +516,87 @@ class Database {
       } catch (error) {
         reject(error);
       }
+    });
+  }
+
+  // ========== FORM METHODS ==========
+
+  createForm(formData) {
+    const {
+      token,
+      template_id,
+      case_id,
+      candidate_email,
+      candidate_name,
+      sender_email,
+      fields,
+      expires_at
+    } = formData;
+
+    return new Promise((resolve, reject) => {
+      const query = `
+        INSERT INTO forms (
+          token, template_id, case_id, candidate_email, candidate_name,
+          sender_email, fields, expires_at, created_date, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      `;
+
+      this.db.run(query, [
+        token,
+        template_id,
+        case_id || null,
+        candidate_email,
+        candidate_name || null,
+        sender_email || null,
+        JSON.stringify(fields || []),
+        expires_at || null
+      ], function(err) {
+        if (err) reject(err);
+        else resolve({ id: this.lastID, token });
+      });
+    });
+  }
+
+  getFormByToken(token) {
+    return new Promise((resolve, reject) => {
+      const query = `
+        SELECT f.*, ft.name as template_name, ft.fields as template_fields
+        FROM forms f
+        LEFT JOIN form_templates ft ON f.template_id = ft.id
+        WHERE f.token = ?
+      `;
+      
+      this.db.get(query, [token], (err, row) => {
+        if (err) reject(err);
+        else {
+          if (row) {
+            // Parse fields JSON
+            try {
+              row.fields = JSON.parse(row.fields || '[]');
+              row.template_fields = row.template_fields ? JSON.parse(row.template_fields) : [];
+            } catch (e) {
+              row.fields = [];
+              row.template_fields = [];
+            }
+          }
+          resolve(row);
+        }
+      });
+    });
+  }
+
+  updateFormStatus(token, status) {
+    return new Promise((resolve, reject) => {
+      const query = `
+        UPDATE forms 
+        SET status = ?, updated_at = datetime('now')
+        WHERE token = ?
+      `;
+      
+      this.db.run(query, [status, token], function(err) {
+        if (err) reject(err);
+        else resolve({ success: this.changes > 0 });
+      });
     });
   }
 
@@ -829,6 +916,18 @@ class Database {
     }
     
     return [];
+  }
+
+  // ========== ACTIVITY LOGGING ==========
+
+  async logActivity(caseId, formToken, action, description, userEmail) {
+    const query = `
+      INSERT INTO activity_logs 
+      (case_id, form_token, action, description, user_email, created_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now'))
+    `;
+    
+    return this.run(query, [caseId, formToken, action, description, userEmail]);
   }
 
   // Helper methods
