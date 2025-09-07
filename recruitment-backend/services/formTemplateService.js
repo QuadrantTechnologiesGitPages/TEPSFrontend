@@ -202,7 +202,7 @@ class FormTemplateService {
       const token = this.generateFormToken();
       
       // Create form record with template fields
-      await database.createForm({
+      await database.createFormTemplate({
         token,
         templateId,
         caseId,
@@ -268,7 +268,7 @@ class FormTemplateService {
       const token = this.generateFormToken();
       
       // Create form record with the correct template fields
-      await database.createForm({
+      await database.createFormTemplate({
         token,
         templateId,
         caseId,

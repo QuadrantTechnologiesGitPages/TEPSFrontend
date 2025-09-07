@@ -1,9 +1,10 @@
-// src/modules/benchSales/components/ResponseManagement/ResponseList.jsx
+// recruitment-app-mui/src/modules/benchSales/components/ResponseManagement/ResponseList.jsx - UPDATED
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import '../../styles/ResponseManagement.css';
 import responseService from '../../services/responseService';
-import formService from '../../services/formService';
+import candidateService from '../../services/candidateService';
+import formService from '../../services/formTemplateService';
 
 const ResponseList = () => {
   const [responses, setResponses] = useState([]);
@@ -12,6 +13,7 @@ const ResponseList = () => {
   const [filter, setFilter] = useState('all');
   const [showCreateCandidate, setShowCreateCandidate] = useState(false);
   const [templateCache, setTemplateCache] = useState({});
+  const [creatingCandidate, setCreatingCandidate] = useState(false);
 
   useEffect(() => {
     fetchResponses();
@@ -38,10 +40,8 @@ const ResponseList = () => {
         try {
           const templateData = await formService.getTemplateById(templateId);
           if (templateData) {
-            // Handle both direct template object and wrapped response
             const template = templateData.template || templateData;
             templates[templateId] = template;
-            console.log(`Template ${templateId} fields:`, template.fields);
           }
         } catch (err) {
           console.error(`Failed to fetch template ${templateId}:`, err);
@@ -81,10 +81,7 @@ const ResponseList = () => {
             const label = fieldMap[fieldId] || fieldId;
             mappedData[label] = value;
           });
-          
-          console.log(`Response ${response.id} mapped data:`, mappedData);
         } else {
-          // No template found, use raw data
           mappedData = parsedData || {};
         }
         
@@ -97,7 +94,6 @@ const ResponseList = () => {
       });
       
       setResponses(parsedResponses);
-      console.log('Parsed responses:', parsedResponses);
     } catch (error) {
       console.error('Error fetching responses:', error);
       toast.error('Failed to load responses');
@@ -118,14 +114,49 @@ const ResponseList = () => {
   };
 
   const createCandidate = async (responseId) => {
+    setCreatingCandidate(true);
     try {
-      const data = await responseService.createCandidate(responseId);
-      toast.success(`Candidate created: ${data.caseId}`);
+      const result = await candidateService.createCandidateFromResponse(responseId);
+      
+      toast.success(
+        <div>
+          Candidate created successfully!
+          <br />
+          <small>ID: {result.candidateId}</small>
+        </div>
+      );
+      
+      // Mark response as processed
+      await markAsProcessed(responseId);
+      
+      // Refresh the list
       fetchResponses();
       setShowCreateCandidate(false);
       setSelectedResponse(null);
+      
+      // Optional: Open the candidate in a new tab
+      if (result.candidateId) {
+        const openCandidate = window.confirm('Candidate created! Do you want to view the candidate profile?');
+        if (openCandidate) {
+          // This will be handled by the candidate management component
+          window.dispatchEvent(new CustomEvent('navigate', { 
+            detail: { 
+              view: 'candidateView',
+              candidateId: result.candidateId
+            }
+          }));
+        }
+      }
     } catch (error) {
-      toast.error('Failed to create candidate');
+      console.error('Error creating candidate:', error);
+      
+      if (error.message.includes('already exists')) {
+        toast.error('A candidate with this email already exists');
+      } else {
+        toast.error(error.message || 'Failed to create candidate');
+      }
+    } finally {
+      setCreatingCandidate(false);
     }
   };
 
@@ -167,7 +198,6 @@ const ResponseList = () => {
     return String(value);
   };
 
-  // Get display name from mapped data
   const getDisplayName = (response) => {
     if (response.candidate_name && response.candidate_name !== 'Unknown') {
       return response.candidate_name;
@@ -177,7 +207,6 @@ const ResponseList = () => {
     return data['Name'] || data['Full Name'] || data.name || data.fullName || 'Unknown';
   };
 
-  // Get display email from mapped data
   const getDisplayEmail = (response) => {
     if (response.candidate_email) return response.candidate_email;
     
@@ -196,6 +225,7 @@ const ResponseList = () => {
 
   const pendingCount = responses.filter(r => !r.processed).length;
   const processedCount = responses.filter(r => r.processed).length;
+  const candidatesCreated = responses.filter(r => r.candidate_id).length;
 
   return (
     <div className="response-list-container">
@@ -226,6 +256,13 @@ const ResponseList = () => {
         </div>
       </div>
 
+      <div className="stats-bar" style={{ marginBottom: '20px', padding: '15px', background: '#f8f9fa', borderRadius: '8px' }}>
+        <span style={{ marginRight: '30px' }}>📊 Total: {responses.length}</span>
+        <span style={{ marginRight: '30px' }}>⏳ Pending: {pendingCount}</span>
+        <span style={{ marginRight: '30px' }}>✅ Processed: {processedCount}</span>
+        <span>👤 Candidates Created: {candidatesCreated}</span>
+      </div>
+
       {responses.length === 0 ? (
         <div className="no-responses">
           <p>No responses found</p>
@@ -243,16 +280,14 @@ const ResponseList = () => {
                   <h3>{displayName}</h3>
                   <div className="badges">
                     {!response.processed && <span className="badge new">New</span>}
-                    {!!response.case_created && <span className="badge case">Case Created</span>}
+                    {response.candidate_id && <span className="badge case">Candidate Created</span>}
                   </div>
                 </div>
                 
                 <div className="response-card-body">
                   <p><strong>Email:</strong> {displayEmail}</p>
                   <p><strong>Submitted:</strong> {formatDate(response.submitted_at)}</p>
-                  {response.caseId && <p><strong>Case:</strong> {response.caseId}</p>}
                   
-                  {/* Show preview of mapped fields */}
                   {mappedData['Phone'] && (
                     <p><strong>Phone:</strong> {mappedData['Phone']}</p>
                   )}
@@ -262,10 +297,7 @@ const ResponseList = () => {
                   
                   <button
                     className="btn-view-details"
-                    onClick={() => {
-                      console.log('Selected response:', response);
-                      setSelectedResponse(response);
-                    }}
+                    onClick={() => setSelectedResponse(response)}
                   >
                     View Details
                   </button>
@@ -281,7 +313,7 @@ const ResponseList = () => {
                     </button>
                   )}
                   
-                  {!response.case_created && (
+                  {!response.candidate_id && (
                     <button
                       className="btn-create-case"
                       onClick={() => {
@@ -290,6 +322,23 @@ const ResponseList = () => {
                       }}
                     >
                       Create Candidate
+                    </button>
+                  )}
+                  
+                  {response.candidate_id && (
+                    <button
+                      className="btn-view-candidate"
+                      style={{ background: '#28a745', color: 'white' }}
+                      onClick={() => {
+                        window.dispatchEvent(new CustomEvent('navigate', { 
+                          detail: { 
+                            view: 'candidateView',
+                            candidateId: response.candidate_id
+                          }
+                        }));
+                      }}
+                    >
+                      View Candidate
                     </button>
                   )}
                 </div>
@@ -322,7 +371,6 @@ const ResponseList = () => {
               <div className="response-data">
                 <h4>Form Responses:</h4>
                 {(() => {
-                  // Use mapped data with proper field labels
                   const dataToDisplay = selectedResponse.mapped_data || selectedResponse.response_data || {};
                   const entries = Object.entries(dataToDisplay);
                   
@@ -330,22 +378,7 @@ const ResponseList = () => {
                     return <p className="no-data">No response data available</p>;
                   }
                   
-                  // If we have a template, sort by field order
-                  let sortedEntries = entries;
-                  if (selectedResponse.template && selectedResponse.template.fields) {
-                    const fieldOrder = {};
-                    selectedResponse.template.fields.forEach((field, index) => {
-                      fieldOrder[field.label] = field.order || index;
-                    });
-                    
-                    sortedEntries = entries.sort((a, b) => {
-                      const orderA = fieldOrder[a[0]] !== undefined ? fieldOrder[a[0]] : 999;
-                      const orderB = fieldOrder[b[0]] !== undefined ? fieldOrder[b[0]] : 999;
-                      return orderA - orderB;
-                    });
-                  }
-                  
-                  return sortedEntries.map(([label, value]) => (
+                  return entries.map(([label, value]) => (
                     <div key={label} className="data-field">
                       <strong>{label}:</strong>
                       <span>{formatFieldValue(value)}</span>
@@ -362,6 +395,14 @@ const ResponseList = () => {
                   )}
                 </div>
               )}
+              
+              {selectedResponse.candidate_id && (
+                <div className="candidate-info" style={{ marginTop: '20px', padding: '15px', background: '#d4edda', borderRadius: '8px' }}>
+                  <p style={{ color: '#155724', fontWeight: '600' }}>
+                    ✅ Candidate profile created (ID: {selectedResponse.candidate_id})
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="modal-footer">
@@ -376,7 +417,7 @@ const ResponseList = () => {
                   Mark as Processed
                 </button>
               )}
-              {!selectedResponse.case_created && (
+              {!selectedResponse.candidate_id && (
                 <button
                   className="btn-create-case"
                   onClick={() => setShowCreateCandidate(true)}
@@ -394,7 +435,7 @@ const ResponseList = () => {
 
       {/* Create Candidate Confirmation */}
       {showCreateCandidate && selectedResponse && (
-        <div className="modal-overlay" onClick={() => setShowCreateCandidate(false)}>
+        <div className="modal-overlay" onClick={() => !creatingCandidate && setShowCreateCandidate(false)}>
           <div className="create-candidate-modal" onClick={e => e.stopPropagation()}>
             <h3>Create Candidate Profile</h3>
             <p>Create a candidate profile from this form response?</p>
@@ -410,6 +451,7 @@ const ResponseList = () => {
                     {data['Phone Number'] && <p><strong>Phone:</strong> {data['Phone Number']}</p>}
                     {data['Location'] && <p><strong>Location:</strong> {data['Location']}</p>}
                     {data['Current Location'] && <p><strong>Location:</strong> {data['Current Location']}</p>}
+                    {data['Visa Status'] && <p><strong>Visa:</strong> {data['Visa Status']}</p>}
                     {data['Skills'] && <p><strong>Skills:</strong> {formatFieldValue(data['Skills'])}</p>}
                     {data['Technical Skills'] && <p><strong>Skills:</strong> {formatFieldValue(data['Technical Skills'])}</p>}
                   </>
@@ -417,20 +459,29 @@ const ResponseList = () => {
               })()}
             </div>
             
-            <div className="modal-actions">
-              <button
-                className="btn-confirm"
-                onClick={() => createCandidate(selectedResponse.id)}
-              >
-                Create Candidate
-              </button>
-              <button
-                className="btn-cancel"
-                onClick={() => setShowCreateCandidate(false)}
-              >
-                Cancel
-              </button>
-            </div>
+            {creatingCandidate && (
+              <div style={{ textAlign: 'center', padding: '20px' }}>
+                <div className="spinner"></div>
+                <p>Creating candidate profile...</p>
+              </div>
+            )}
+            
+            {!creatingCandidate && (
+              <div className="modal-actions">
+                <button
+                  className="btn-confirm"
+                  onClick={() => createCandidate(selectedResponse.id)}
+                >
+                  Create Candidate
+                </button>
+                <button
+                  className="btn-cancel"
+                  onClick={() => setShowCreateCandidate(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

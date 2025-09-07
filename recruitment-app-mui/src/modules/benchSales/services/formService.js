@@ -1,4 +1,4 @@
-// src/modules/benchSales/services/formService.js
+// src/modules/benchSales/services/formService.js - UPDATED VERSION
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
@@ -44,39 +44,83 @@ class FormService {
 
   async createTemplate(templateData) {
     try {
+      const userEmail = this.getUserEmail();
+      
+      // IMPORTANT: Add created_by to the template data
+      const dataToSend = {
+        ...templateData,
+        created_by: templateData.created_by || userEmail  // Use provided created_by or default to userEmail
+      };
+      
       const response = await fetch(`${API_BASE}/templates`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-email': this.getUserEmail()
+          'x-user-email': userEmail
         },
-        body: JSON.stringify(templateData)
+        body: JSON.stringify(dataToSend)
       });
       
-      if (!response.ok) throw new Error('Failed to create template');
-      return await response.json();
+      const responseData = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(responseData.error || 'Failed to create template');
+      }
+      
+      // Return success format expected by FormDesigner
+      return { 
+        success: true, 
+        template: responseData.template || responseData,
+        id: responseData.id || responseData.template?.id
+      };
     } catch (error) {
       console.error('Error creating template:', error);
-      throw error;
+      // Return error format expected by FormDesigner
+      return { 
+        success: false, 
+        error: error.message 
+      };
     }
   }
 
   async updateTemplate(templateId, updates) {
     try {
+      const userEmail = this.getUserEmail();
+      
+      // IMPORTANT: Add updated_by to the updates
+      const dataToSend = {
+        ...updates,
+        updated_by: updates.updated_by || userEmail  // Use provided updated_by or default to userEmail
+      };
+      
       const response = await fetch(`${API_BASE}/templates/${templateId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-email': this.getUserEmail()
+          'x-user-email': userEmail
         },
-        body: JSON.stringify(updates)
+        body: JSON.stringify(dataToSend)
       });
       
-      if (!response.ok) throw new Error('Failed to update template');
-      return await response.json();
+      const responseData = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(responseData.error || 'Failed to update template');
+      }
+      
+      // Return success format expected by FormDesigner
+      return { 
+        success: true, 
+        template: responseData.template || responseData,
+        id: templateId
+      };
     } catch (error) {
       console.error('Error updating template:', error);
-      throw error;
+      // Return error format expected by FormDesigner
+      return { 
+        success: false, 
+        error: error.message 
+      };
     }
   }
 
@@ -101,16 +145,19 @@ class FormService {
   
   async sendForm(formData) {
     try {
+      const userEmail = this.getUserEmail();
+      
       const response = await fetch(`${API_BASE}/templates/send-form`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-email': this.getUserEmail()
+          'x-user-email': userEmail
         },
         body: JSON.stringify({
           ...formData,
-          senderEmail: formData.senderEmail || this.getUserEmail(),
-          senderName: formData.senderName || localStorage.getItem('userName') || 'Recruitment Team'
+          senderEmail: formData.senderEmail || userEmail,
+          senderName: formData.senderName || localStorage.getItem('userName') || 'Recruitment Team',
+          created_by: formData.created_by || userEmail  // Add created_by here too
         })
       });
       
@@ -160,13 +207,18 @@ class FormService {
 
   async addFieldToLibrary(fieldData) {
     try {
+      const userEmail = this.getUserEmail();
+      
       const response = await fetch(`${API_BASE}/templates/fields/library`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-email': this.getUserEmail()
+          'x-user-email': userEmail
         },
-        body: JSON.stringify(fieldData)
+        body: JSON.stringify({
+          ...fieldData,
+          created_by: fieldData.created_by || userEmail  // Add created_by for field library too
+        })
       });
       
       if (!response.ok) throw new Error('Failed to add field');

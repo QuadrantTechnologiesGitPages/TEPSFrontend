@@ -73,6 +73,7 @@ const FormDesigner = ({ onClose, template = null }) => {
   };
 
   // Save template
+// Save template
 const saveTemplate = async () => {
   if (!formName.trim()) {
     toast.error('Please enter a form name');
@@ -90,7 +91,8 @@ const saveTemplate = async () => {
     const templateData = {
       name: formName,
       description: formDescription,
-      fields: fields
+      fields: fields,
+      created_by: localStorage.getItem('userEmail') || 'system' // ADD THIS LINE
     };
     
     const data = template?.id 

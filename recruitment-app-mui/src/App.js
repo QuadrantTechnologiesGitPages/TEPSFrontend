@@ -1,4 +1,4 @@
-// src/App.js - WITH REACT ROUTER
+// src/App.js - UPDATED WITH CANDIDATE MANAGEMENT
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import './styles/globals.css';
@@ -20,6 +20,12 @@ import FormDesigner from './modules/benchSales/components/FormDesigner/FormDesig
 import TemplateList from './modules/benchSales/components/FormDesigner/TemplateList';
 import ResponseList from './modules/benchSales/components/ResponseManagement/ResponseList';
 import PublicCandidateForm from './modules/benchSales/components/CandidateForm/PublicCandidateForm';
+
+// NEW: Candidate Management imports
+import CandidateManagementList from './modules/benchSales/components/CandidateManagement/CandidateList';
+import CandidateForm from './modules/benchSales/components/CandidateManagement/CandidateForm';
+import CandidateView from './modules/benchSales/components/CandidateManagement/CandidateView';
+
 import { Toaster } from 'react-hot-toast';
 import { mockCandidates } from './data/mockData';
 import { searchCandidates } from './utils/candidateMatcher';
@@ -52,6 +58,10 @@ function AppContent() {
   const [showFormDesigner, setShowFormDesigner] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState(null);
   const [showResponses, setShowResponses] = useState(false);
+  
+  // NEW: States for Candidate Management
+  const [candidateManagementView, setCandidateManagementView] = useState('list');
+  const [selectedCandidateId, setSelectedCandidateId] = useState(null);
 
   // Always call hooks in the same order
   const isBenchSales = hasRole('BenchSales');
@@ -117,6 +127,27 @@ function AppContent() {
           case 'templates':
             setCurrentView('templates');
             break;
+          // NEW: Handle candidate management navigation
+          case 'candidateList':
+            setCurrentView('candidates');
+            setCandidateManagementView('list');
+            setSelectedCandidateId(null);
+            break;
+          case 'candidateCreate':
+            setCurrentView('candidates');
+            setCandidateManagementView('create');
+            setSelectedCandidateId(null);
+            break;
+          case 'candidateEdit':
+            setCurrentView('candidates');
+            setCandidateManagementView('edit');
+            setSelectedCandidateId(e.detail.candidateId);
+            break;
+          case 'candidateView':
+            setCurrentView('candidates');
+            setCandidateManagementView('view');
+            setSelectedCandidateId(e.detail.candidateId);
+            break;
           default:
             setCurrentView(e.detail.view);
         }
@@ -178,6 +209,14 @@ function AppContent() {
     }
   };
 
+  // NEW: Handler for candidate management navigation
+  const handleCandidateNavigation = (view, params) => {
+    setCandidateManagementView(view);
+    if (params?.candidateId) {
+      setSelectedCandidateId(params.candidateId);
+    }
+  };
+
   // Move the early return AFTER all hooks
   if (!isAuthenticated) {
     return <Login />;
@@ -227,6 +266,39 @@ function AppContent() {
             }}
           />
         );
+      
+      // NEW: Candidate Management views
+      case 'candidates':
+        if (candidateManagementView === 'list') {
+          return (
+            <CandidateManagementList 
+              onNavigate={handleCandidateNavigation}
+            />
+          );
+        } else if (candidateManagementView === 'create') {
+          return (
+            <CandidateForm 
+              onNavigate={handleCandidateNavigation}
+              onCancel={() => handleCandidateNavigation('list')}
+            />
+          );
+        } else if (candidateManagementView === 'edit') {
+          return (
+            <CandidateForm 
+              candidateId={selectedCandidateId}
+              onNavigate={handleCandidateNavigation}
+              onCancel={() => handleCandidateNavigation('list')}
+            />
+          );
+        } else if (candidateManagementView === 'view') {
+          return (
+            <CandidateView 
+              candidateId={selectedCandidateId}
+              onNavigate={handleCandidateNavigation}
+            />
+          );
+        }
+        break;
       
       case 'search':
         return (
@@ -278,6 +350,15 @@ function AppContent() {
                 onClick={() => setCurrentView('cases')}
               >
                 Cases
+              </button>
+              <button 
+                className={`nav-tab ${currentView === 'candidates' ? 'active' : ''}`}
+                onClick={() => {
+                  setCurrentView('candidates');
+                  setCandidateManagementView('list');
+                }}
+              >
+                Candidates
               </button>
               <button 
                 className={`nav-tab ${currentView === 'responses' ? 'active' : ''}`}
