@@ -6,28 +6,40 @@ const database = require('../utils/database');
 
 class OAuthService {
   constructor() {
-    // Initialize Google OAuth2 client
-    this.googleOAuth2Client = new google.auth.OAuth2(
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET,
-      `${process.env.BACKEND_URL || 'http://localhost:5000'}/api/auth/google/callback`
-    );
+    // Initialize Google OAuth2 client only if credentials are provided
+    if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+      this.googleOAuth2Client = new google.auth.OAuth2(
+        process.env.GOOGLE_CLIENT_ID,
+        process.env.GOOGLE_CLIENT_SECRET,
+        `${process.env.BACKEND_URL || 'http://localhost:5000'}/api/auth/google/callback`
+      );
+    } else {
+      this.googleOAuth2Client = null;
+    }
 
-    // Initialize Microsoft MSAL client
-    this.msalConfig = {
-      auth: {
-        clientId: process.env.MICROSOFT_CLIENT_ID,
-        authority: `https://login.microsoftonline.com/${process.env.MICROSOFT_TENANT_ID || 'common'}`,
-        clientSecret: process.env.MICROSOFT_CLIENT_SECRET,
-      }
-    };
-    
-    this.msalClient = new ConfidentialClientApplication(this.msalConfig);
+    // Initialize Microsoft MSAL client only if credentials are provided
+    if (process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET) {
+      this.msalConfig = {
+        auth: {
+          clientId: process.env.MICROSOFT_CLIENT_ID,
+          authority: `https://login.microsoftonline.com/${process.env.MICROSOFT_TENANT_ID || 'common'}`,
+          clientSecret: process.env.MICROSOFT_CLIENT_SECRET,
+        }
+      };
+      
+      this.msalClient = new ConfidentialClientApplication(this.msalConfig);
+    } else {
+      this.msalClient = null;
+    }
   }
 
   // ==================== GOOGLE OAuth ====================
   
   getGoogleAuthUrl(state) {
+    if (!this.googleOAuth2Client) {
+      throw new Error('Google OAuth not configured');
+    }
+    
     const scopes = [
       'https://www.googleapis.com/auth/gmail.send',
       'https://www.googleapis.com/auth/gmail.readonly',
@@ -116,6 +128,10 @@ class OAuthService {
   // ==================== MICROSOFT OAuth ====================
   
   getMicrosoftAuthUrl(state) {
+    if (!this.msalClient) {
+      throw new Error('Microsoft OAuth not configured');
+    }
+    
     const authCodeUrlParameters = {
       scopes: [
         'User.Read',
@@ -131,6 +147,10 @@ class OAuthService {
   }
 
   async handleMicrosoftCallback(code) {
+    if (!this.msalClient) {
+      throw new Error('Microsoft OAuth not configured');
+    }
+    
     try {
       const tokenRequest = {
         code: code,
@@ -185,6 +205,10 @@ class OAuthService {
   }
 
   async refreshMicrosoftToken(email) {
+    if (!this.msalClient) {
+      throw new Error('Microsoft OAuth not configured');
+    }
+    
     try {
       const tokenData = await database.getOAuthToken(email, 'microsoft');
       
