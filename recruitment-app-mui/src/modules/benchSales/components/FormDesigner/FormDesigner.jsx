@@ -17,6 +17,8 @@ const FormDesigner = ({ onClose, template = null }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [showEmailComposer, setShowEmailComposer] = useState(false);
   const [selectedCandidate, setSelectedCandidate] = useState(null);
+  const [currentTemplateId, setCurrentTemplateId] = useState(template?.id || null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   // Add field to form
   const addField = (fieldType) => {
@@ -32,6 +34,7 @@ const FormDesigner = ({ onClose, template = null }) => {
     
     setFields([...fields, newField]);
     setSelectedField(newField);
+    setHasUnsavedChanges(true);
   };
 
   // Update field properties
@@ -43,6 +46,7 @@ const FormDesigner = ({ onClose, template = null }) => {
     if (selectedField?.id === fieldId) {
       setSelectedField({ ...selectedField, ...updates });
     }
+    setHasUnsavedChanges(true);
   };
 
   // Delete field
@@ -51,6 +55,7 @@ const FormDesigner = ({ onClose, template = null }) => {
     if (selectedField?.id === fieldId) {
       setSelectedField(null);
     }
+    setHasUnsavedChanges(true);
   };
 
   // Reorder fields
@@ -70,55 +75,102 @@ const FormDesigner = ({ onClose, template = null }) => {
     });
     
     setFields(newFields);
+    setHasUnsavedChanges(true);
   };
 
   // Save template
-// Save template
-const saveTemplate = async () => {
-  if (!formName.trim()) {
-    toast.error('Please enter a form name');
-    return;
-  }
-  
-  if (fields.length === 0) {
-    toast.error('Please add at least one field');
-    return;
-  }
-  
-  setIsSaving(true);
-  
-  try {
-    const templateData = {
-      name: formName,
-      description: formDescription,
-      fields: fields,
-      created_by: localStorage.getItem('userEmail') || 'system' // ADD THIS LINE
-    };
-    
-    const data = template?.id 
-      ? await formService.updateTemplate(template.id, templateData)
-      : await formService.createTemplate(templateData);
-    
-    if (data.success) {
-      toast.success(template?.id ? 'Template updated!' : 'Template created!');
-      if (onClose) {
-        onClose(data);
-      }
-    } else {
-      throw new Error(data.error);
+  const saveTemplate = async () => {
+    if (!formName.trim()) {
+      toast.error('Please enter a form name');
+      return null;
     }
-  } catch (error) {
-    toast.error(error.message || 'Failed to save template');
-  } finally {
-    setIsSaving(false);
-  }
-};
+    
+    if (fields.length === 0) {
+      toast.error('Please add at least one field');
+      return null;
+    }
+    
+    setIsSaving(true);
+    
+    try {
+      const templateData = {
+        name: formName,
+        description: formDescription,
+        fields: fields,
+        created_by: localStorage.getItem('userEmail') || 'system'
+      };
+      
+      const data = currentTemplateId 
+        ? await formService.updateTemplate(currentTemplateId, templateData)
+        : await formService.createTemplate(templateData);
+      
+      if (data.success) {
+        toast.success(currentTemplateId ? 'Template updated!' : 'Template created!');
+        
+        // Store the template ID for future use
+        if (!currentTemplateId && (data.templateId || data.id)) {
+          const newId = data.templateId || data.id;
+          setCurrentTemplateId(newId);
+        }
+        
+        setHasUnsavedChanges(false);
+        
+        // Return the data for use in sendToCandidate
+        return data;
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (error) {
+      toast.error(error.message || 'Failed to save template');
+      return null;
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   // Send form to candidate
-  const sendToCandidate = (candidateData) => {
-    setSelectedCandidate(candidateData);
-    setShowEmailComposer(true);
+  const sendToCandidate = async (candidateData) => {
+    try {
+      let templateIdToUse = currentTemplateId;
+      
+      // If no template ID exists or there are unsaved changes, save first
+      if (!templateIdToUse || hasUnsavedChanges) {
+        const saveResult = await saveTemplate();
+        if (!saveResult || !saveResult.success) {
+          toast.error('Failed to save template. Please try again.');
+          return;
+        }
+        
+        // Get the template ID from save result
+        templateIdToUse = saveResult.templateId || saveResult.id || currentTemplateId;
+        
+        if (!templateIdToUse) {
+          toast.error('Unable to determine template ID');
+          return;
+        }
+      }
+      
+      // Set the candidate data
+      setSelectedCandidate({
+        ...candidateData,
+        templateId: templateIdToUse
+      });
+      
+      // Show email composer
+      setShowEmailComposer(true);
+      
+    } catch (error) {
+      console.error('Error sending to candidate:', error);
+      toast.error('Failed to prepare form');
+    }
   };
+
+  // Track changes to form name and description
+  useEffect(() => {
+    if (template?.name !== formName || template?.description !== formDescription) {
+      setHasUnsavedChanges(true);
+    }
+  }, [formName, formDescription]);
 
   return (
     <div className="form-designer-container">
@@ -140,6 +192,11 @@ const saveTemplate = async () => {
               onChange={(e) => setFormDescription(e.target.value)}
               placeholder="Description (optional)"
             />
+            {hasUnsavedChanges && (
+              <span className="unsaved-indicator" style={{ color: '#f6ad55', marginLeft: '10px' }}>
+                • Unsaved changes
+              </span>
+            )}
           </div>
           <div className="header-right">
             <button className="btn-close" onClick={onClose}>×</button>
@@ -183,7 +240,7 @@ const saveTemplate = async () => {
                 {fields.length === 0 ? (
                   <div className="empty-state">
                     <p>No fields added yet</p>
-                    <p>Drag fields from the palette or click to add</p>
+                    <p>Click fields from the palette to add</p>
                   </div>
                 ) : (
                   <div className="fields-list">
@@ -203,6 +260,9 @@ const saveTemplate = async () => {
                             {field.type === 'date' && '📅'}
                             {field.type === 'file' && '📎'}
                             {field.type === 'url' && '🔗'}
+                            {field.type === 'number' && '🔢'}
+                            {field.type === 'radio' && '⭕'}
+                            {field.type === 'checkbox' && '☑️'}
                           </span>
                           <span className="field-label">{field.label}</span>
                           {field.required && <span className="required-badge">*</span>}
@@ -270,6 +330,17 @@ const saveTemplate = async () => {
             <div className="send-view">
               <div className="send-options">
                 <h3>Send Form to Candidate</h3>
+                {hasUnsavedChanges && (
+                  <div className="warning-message" style={{ 
+                    background: '#fff5e6', 
+                    padding: '10px', 
+                    borderRadius: '5px',
+                    marginBottom: '20px',
+                    border: '1px solid #f6ad55'
+                  }}>
+                    ⚠️ You have unsaved changes. The form will be saved automatically before sending.
+                  </div>
+                )}
                 <div className="candidate-input">
                   <input
                     type="email"
@@ -319,7 +390,7 @@ const saveTemplate = async () => {
             onClick={saveTemplate}
             disabled={isSaving || fields.length === 0}
           >
-            {isSaving ? 'Saving...' : (template?.id ? 'Update Template' : 'Save Template')}
+            {isSaving ? 'Saving...' : (currentTemplateId ? 'Update Template' : 'Save Template')}
           </button>
         </div>
       </div>
@@ -328,7 +399,7 @@ const saveTemplate = async () => {
       {showEmailComposer && (
         <EmailComposer
           template={{
-            id: template?.id,
+            id: selectedCandidate?.templateId || currentTemplateId,
             name: formName,
             fields: fields
           }}

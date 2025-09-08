@@ -1,4 +1,4 @@
-// src/App.js - UPDATED WITH CANDIDATE MANAGEMENT
+// src/App.js - UPDATED WITH FIXED CANDIDATE MANAGEMENT NAVIGATION
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import './styles/globals.css';
@@ -209,11 +209,36 @@ function AppContent() {
     }
   };
 
-  // NEW: Handler for candidate management navigation
+  // FIXED: Handler for candidate management navigation
   const handleCandidateNavigation = (view, params) => {
-    setCandidateManagementView(view);
-    if (params?.candidateId) {
-      setSelectedCandidateId(params.candidateId);
+    console.log('Navigating to:', view, 'with params:', params); // Debug log
+    
+    // Normalize view names
+    switch(view) {
+      case 'candidateView':
+      case 'view':
+        setCandidateManagementView('view');
+        setSelectedCandidateId(params?.candidateId);
+        break;
+      case 'candidateEdit':
+      case 'edit':
+        setCandidateManagementView('edit');
+        setSelectedCandidateId(params?.candidateId);
+        break;
+      case 'candidateCreate':
+      case 'create':
+        setCandidateManagementView('create');
+        setSelectedCandidateId(null);
+        break;
+      case 'candidateList':
+      case 'list':
+        setCandidateManagementView('list');
+        setSelectedCandidateId(null);
+        break;
+      default:
+        console.warn('Unknown navigation view:', view);
+        setCandidateManagementView('list');
+        setSelectedCandidateId(null);
     }
   };
 
@@ -267,18 +292,24 @@ function AppContent() {
           />
         );
       
-      // NEW: Candidate Management views
+      // FIXED: Candidate Management views with proper navigation
       case 'candidates':
         if (candidateManagementView === 'list') {
           return (
             <CandidateManagementList 
-              onNavigate={handleCandidateNavigation}
+              onNavigate={(view, params) => {
+                console.log('CandidateList navigation:', view, params); // Debug
+                handleCandidateNavigation(view, params);
+              }}
             />
           );
         } else if (candidateManagementView === 'create') {
           return (
             <CandidateForm 
-              onNavigate={handleCandidateNavigation}
+              onNavigate={(view, params) => {
+                console.log('CandidateForm navigation:', view, params); // Debug
+                handleCandidateNavigation(view, params);
+              }}
               onCancel={() => handleCandidateNavigation('list')}
             />
           );
@@ -286,7 +317,10 @@ function AppContent() {
           return (
             <CandidateForm 
               candidateId={selectedCandidateId}
-              onNavigate={handleCandidateNavigation}
+              onNavigate={(view, params) => {
+                console.log('CandidateForm edit navigation:', view, params); // Debug
+                handleCandidateNavigation(view, params);
+              }}
               onCancel={() => handleCandidateNavigation('list')}
             />
           );
@@ -294,11 +328,23 @@ function AppContent() {
           return (
             <CandidateView 
               candidateId={selectedCandidateId}
-              onNavigate={handleCandidateNavigation}
+              onNavigate={(view, params) => {
+                console.log('CandidateView navigation:', view, params); // Debug
+                // Handle special case where edit is called from view
+                if (view === 'candidateEdit' || view === 'edit') {
+                  // If no candidateId in params, use the current one
+                  handleCandidateNavigation(view, { 
+                    candidateId: params?.candidateId || selectedCandidateId 
+                  });
+                } else {
+                  handleCandidateNavigation(view, params);
+                }
+              }}
             />
           );
         }
-        break;
+        // Return null if no matching view
+        return null;
       
       case 'search':
         return (
@@ -356,6 +402,7 @@ function AppContent() {
                 onClick={() => {
                   setCurrentView('candidates');
                   setCandidateManagementView('list');
+                  setSelectedCandidateId(null);
                 }}
               >
                 Candidates

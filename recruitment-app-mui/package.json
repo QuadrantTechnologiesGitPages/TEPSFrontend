@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
-    "@azure/msal-browser": "^4.21.1",
+    "@azure/msal-browser": "^4.22.0",
     "@azure/msal-react": "^3.0.19",
     "@emailjs/browser": "^4.4.1",
     "@emotion/react": "^11.14.0",

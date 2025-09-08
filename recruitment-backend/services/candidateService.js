@@ -23,7 +23,6 @@ class CandidateService {
       const candidate = await database.getCandidateById(candidateId);
       
       if (candidate) {
-        // Get activity count
         const activities = await database.getCandidateActivities(candidateId);
         candidate.activityCount = activities.length;
       }
@@ -34,11 +33,10 @@ class CandidateService {
       throw error;
     }
   }
-
   /**
    * Get candidate activities
    */
-  async getCandidateActivities(candidateId) {
+ async getCandidateActivities(candidateId) {
     try {
       const activities = await database.getCandidateActivities(candidateId);
       return activities;
@@ -53,19 +51,14 @@ class CandidateService {
    */
   async createCandidate(candidateData, createdBy) {
     try {
-      // Check if candidate with email already exists
       const existing = await database.getCandidateByEmail(candidateData.email);
       if (existing) {
         throw new Error('Candidate with this email already exists');
       }
       
-      // Add created_by field
       candidateData.created_by = createdBy;
-      
-      // Create candidate
       const result = await database.createCandidate(candidateData);
       
-      // Log activity
       await database.logCandidateActivity(
         result.id,
         'created',
@@ -74,7 +67,6 @@ class CandidateService {
         { source: 'Manual Entry' }
       );
       
-      // Send notification
       if (global.sendNotification) {
         await global.sendNotification(createdBy, {
           type: 'candidate_created',
@@ -86,7 +78,6 @@ class CandidateService {
         });
       }
       
-      // Fetch and return the created candidate
       const candidate = await database.getCandidateById(result.id);
       
       return {
@@ -99,15 +90,10 @@ class CandidateService {
     }
   }
 
-  /**
-   * Create candidate from form response
-   */
   async createCandidateFromResponse(responseId, createdBy) {
     try {
-      // This will handle all the mapping and creation
       const result = await database.createCandidateFromResponse(responseId, createdBy);
       
-      // Send notification
       if (global.sendNotification) {
         await global.sendNotification(createdBy, {
           type: 'candidate_created',
@@ -119,7 +105,6 @@ class CandidateService {
         });
       }
       
-      // Fetch and return the created candidate
       const candidate = await database.getCandidateById(result.id);
       
       return {
@@ -132,18 +117,13 @@ class CandidateService {
     }
   }
 
-  /**
-   * Update candidate
-   */
   async updateCandidate(candidateId, updates, updatedBy) {
     try {
-      // Get current candidate data for comparison
       const currentCandidate = await database.getCandidateById(candidateId);
       if (!currentCandidate) {
         throw new Error('Candidate not found');
       }
       
-      // Track what changed
       const changes = {};
       Object.keys(updates).forEach(key => {
         if (currentCandidate[key] !== updates[key]) {
@@ -154,10 +134,8 @@ class CandidateService {
         }
       });
       
-      // Update candidate
       await database.updateCandidate(candidateId, updates, updatedBy);
       
-      // Log activity with changes
       if (Object.keys(changes).length > 0) {
         await database.logCandidateActivity(
           candidateId,
@@ -168,7 +146,6 @@ class CandidateService {
         );
       }
       
-      // Fetch and return updated candidate
       const candidate = await database.getCandidateById(candidateId);
       
       return { candidate };
@@ -178,24 +155,19 @@ class CandidateService {
     }
   }
 
-  /**
-   * Update candidate status
-   */
-  async updateCandidateStatus(candidateId, status, reason, updatedBy) {
+async updateCandidateStatus(candidateId, status, reason, updatedBy) {
     try {
       const currentCandidate = await database.getCandidateById(candidateId);
       if (!currentCandidate) {
         throw new Error('Candidate not found');
       }
       
-      // Update status
       await database.updateCandidate(
         candidateId,
         { status },
         updatedBy
       );
       
-      // Log activity
       await database.logCandidateActivity(
         candidateId,
         'status_changed',
@@ -208,7 +180,6 @@ class CandidateService {
         }
       );
       
-      // Fetch and return updated candidate
       const candidate = await database.getCandidateById(candidateId);
       
       return { candidate };
@@ -217,7 +188,6 @@ class CandidateService {
       throw error;
     }
   }
-
   /**
    * Add note to candidate
    */
@@ -228,7 +198,6 @@ class CandidateService {
         throw new Error('Candidate not found');
       }
       
-      // Append note to existing notes
       const currentNotes = candidate.notes || '';
       const timestamp = new Date().toISOString();
       const newNote = `[${timestamp}] ${addedBy}: ${note}`;
@@ -236,14 +205,12 @@ class CandidateService {
         ? `${currentNotes}\n\n${newNote}`
         : newNote;
       
-      // Update candidate
       await database.updateCandidate(
         candidateId,
         { notes: updatedNotes },
         addedBy
       );
       
-      // Log activity
       await database.logCandidateActivity(
         candidateId,
         'note_added',
@@ -252,7 +219,6 @@ class CandidateService {
         { note }
       );
       
-      // Fetch and return updated candidate
       const updatedCandidate = await database.getCandidateById(candidateId);
       
       return { candidate: updatedCandidate };
@@ -261,10 +227,6 @@ class CandidateService {
       throw error;
     }
   }
-
-  /**
-   * Deactivate candidate (soft delete)
-   */
   async deactivateCandidate(candidateId, deactivatedBy) {
     try {
       const candidate = await database.getCandidateById(candidateId);
@@ -272,14 +234,12 @@ class CandidateService {
         throw new Error('Candidate not found');
       }
       
-      // Update status to Inactive
       await database.updateCandidate(
         candidateId,
         { status: 'Inactive' },
         deactivatedBy
       );
       
-      // Log activity
       await database.logCandidateActivity(
         candidateId,
         'deactivated',
@@ -295,60 +255,16 @@ class CandidateService {
     }
   }
 
-  /**
-   * Get candidate statistics
-   */
-  async getCandidateStats() {
+ async getCandidateStats() {
     try {
-      const allCandidates = await database.getCandidates({});
-      
-      const stats = {
-        total: allCandidates.length,
-        active: allCandidates.filter(c => c.status === 'Active').length,
-        inactive: allCandidates.filter(c => c.status === 'Inactive').length,
-        placed: allCandidates.filter(c => c.status === 'Placed').length,
-        onHold: allCandidates.filter(c => c.status === 'On Hold').length,
-        byVisa: {},
-        bySource: {},
-        recentlyAdded: allCandidates.filter(c => {
-          const createdDate = new Date(c.created_at);
-          const daysSince = (Date.now() - createdDate) / (1000 * 60 * 60 * 24);
-          return daysSince <= 7;
-        }).length
-      };
-      
-      // Count by visa status
-      allCandidates.forEach(c => {
-        if (c.visa_status) {
-          stats.byVisa[c.visa_status] = (stats.byVisa[c.visa_status] || 0) + 1;
-        }
-      });
-      
-      // Count by source
-      allCandidates.forEach(c => {
-        const source = c.source || 'Unknown';
-        stats.bySource[source] = (stats.bySource[source] || 0) + 1;
-      });
-      
+      const stats = await database.getCandidateStats();
       return stats;
     } catch (error) {
-      console.error('Error calculating stats:', error);
-      return {
-        total: 0,
-        active: 0,
-        inactive: 0,
-        placed: 0,
-        onHold: 0,
-        byVisa: {},
-        bySource: {},
-        recentlyAdded: 0
-      };
+      console.error('Error getting stats:', error);
+      throw error;
     }
   }
 
-  /**
-   * Export candidates to CSV
-   */
   async exportToCSV(filters = {}) {
     try {
       const candidates = await database.getCandidates(filters);
@@ -357,7 +273,6 @@ class CandidateService {
         return 'No candidates found';
       }
       
-      // Define CSV headers
       const headers = [
         'ID', 'Name', 'Email', 'Phone', 'LinkedIn',
         'Location', 'Visa Status', 'Experience', 'Skills',
@@ -366,7 +281,6 @@ class CandidateService {
         'Created Date', 'Created By'
       ];
       
-      // Build CSV
       const csv = [headers.join(',')];
       
       candidates.forEach(c => {
@@ -433,6 +347,7 @@ class CandidateService {
       throw error;
     }
   }
+
 }
 
 module.exports = new CandidateService();

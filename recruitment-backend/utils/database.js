@@ -1,4 +1,4 @@
-// recruitment-backend/utils/database.js - COMPLETE VERSION WITH ALL METHODS
+// recruitment-backend/utils/database.js - COMPLETE VERSION WITH PROPER JSON HANDLING
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 
@@ -28,8 +28,6 @@ class Database {
   initializeTables() {
     return new Promise((resolve, reject) => {
       this.db.serialize(() => {
-        // ========== EXISTING TABLES (keeping as is) ==========
-        
         // OAuth tokens table
         this.db.run(`CREATE TABLE IF NOT EXISTS oauth_tokens (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -87,7 +85,7 @@ class Database {
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )`);
 
-        // Form templates table - Updated with 'deleted' column
+        // Form templates table
         this.db.run(`CREATE TABLE IF NOT EXISTS form_templates (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL,
@@ -124,6 +122,7 @@ class Database {
           case_id TEXT,
           candidate_id INTEGER,
           notes TEXT,
+          deleted INTEGER DEFAULT 0,
           FOREIGN KEY (form_token) REFERENCES forms(token),
           FOREIGN KEY (template_id) REFERENCES form_templates(id),
           FOREIGN KEY (candidate_id) REFERENCES candidates(id)
@@ -171,38 +170,27 @@ class Database {
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )`);
 
-        // ========== NEW CANDIDATES TABLES ==========
-        
         // Candidates table
         this.db.run(`CREATE TABLE IF NOT EXISTS candidates (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          -- Basic Info
           name TEXT NOT NULL,
           email TEXT UNIQUE NOT NULL,
           phone TEXT,
           linkedin_url TEXT,
-          
-          -- Professional Info
           current_location TEXT,
           visa_status TEXT,
           years_experience TEXT,
           skills TEXT,
           education TEXT,
           current_employer TEXT,
-          
-          -- Tracking Info
           status TEXT DEFAULT 'Active',
           source TEXT,
           source_id TEXT,
           referred_by TEXT,
-          
-          -- Additional Info
           availability TEXT,
           expected_salary TEXT,
           notes TEXT,
           resume_url TEXT,
-          
-          -- Metadata
           created_by TEXT NOT NULL,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -226,146 +214,298 @@ class Database {
           
           // Create default form template after all tables are created
           this.createDefaultTemplate();
-          console.log('✅ Database initialized with candidates table');
+          console.log('✅ Database initialized with all tables');
           resolve();
         });
       });
     });
   }
 
-  // ========== FORM TEMPLATE METHODS ==========
-
-  getFormTemplates(filters = {}) {
-    return new Promise((resolve, reject) => {
-      const query = `
-        SELECT * FROM form_templates 
-        WHERE deleted = 0
-        ORDER BY created_at DESC
-      `;
-      
-      this.db.all(query, (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows);
-      });
+  // ========== JSON HANDLING HELPERS ==========
+  
+  /**
+   * Parse JSON fields in a row based on field definitions
+   */
+  parseJsonFields(row, jsonFields = []) {
+    if (!row) return row;
+    
+    const parsed = { ...row };
+    jsonFields.forEach(field => {
+      if (parsed[field] && typeof parsed[field] === 'string') {
+        try {
+          parsed[field] = JSON.parse(parsed[field]);
+        } catch (e) {
+          console.error(`Failed to parse JSON field ${field}:`, e);
+          // Keep original value if parsing fails
+        }
+      }
     });
+    return parsed;
   }
 
-  getFormTemplateById(templateId) {
-    return new Promise((resolve, reject) => {
-      const query = `
-        SELECT * FROM form_templates 
-        WHERE id = ? AND deleted = 0
-      `;
-      
-      this.db.get(query, [templateId], (err, row) => {
-        if (err) reject(err);
-        else resolve(row);
-      });
+  /**
+   * Stringify JSON fields before storing
+   */
+  stringifyJsonFields(data, jsonFields = []) {
+    const stringified = { ...data };
+    jsonFields.forEach(field => {
+      if (stringified[field] !== undefined && stringified[field] !== null) {
+        if (typeof stringified[field] !== 'string') {
+          stringified[field] = JSON.stringify(stringified[field]);
+        }
+      }
     });
+    return stringified;
   }
 
-  createFormTemplate(templateData) {
+  // ========== FORM TEMPLATE METHODS (WITH PROPER JSON HANDLING) ==========
+
+  async getFormTemplates(activeOnly = true) {
+    const query = activeOnly
+      ? 'SELECT * FROM form_templates WHERE deleted = 0 AND is_active = 1 ORDER BY created_at DESC'
+      : 'SELECT * FROM form_templates WHERE deleted = 0 ORDER BY created_at DESC';
+    
+    const rows = await this.all(query);
+    
+    // Parse JSON fields for each template
+    return rows.map(row => this.parseJsonFields(row, ['fields', 'settings']));
+  }
+
+  async getFormTemplateById(templateId) {
+    const query = 'SELECT * FROM form_templates WHERE id = ? AND deleted = 0';
+    const row = await this.get(query, [templateId]);
+    
+    // Parse JSON fields
+    return this.parseJsonFields(row, ['fields', 'settings']);
+  }
+
+  async createFormTemplate(templateData) {
+    // Prepare data with JSON stringification
+    const preparedData = this.stringifyJsonFields(
+      {
+        name: templateData.name,
+        description: templateData.description || '',
+        fields: templateData.fields || [],
+        settings: templateData.settings || {},
+        created_by: templateData.created_by || templateData.createdBy
+      },
+      ['fields', 'settings']
+    );
+
+    const query = `
+      INSERT INTO form_templates (
+        name, description, fields, settings, created_by
+      ) VALUES (?, ?, ?, ?, ?)
+    `;
+
+    const result = await this.run(query, [
+      preparedData.name,
+      preparedData.description,
+      preparedData.fields,
+      preparedData.settings,
+      preparedData.created_by
+    ]);
+
+    // Return the created template with parsed fields
+    return this.getFormTemplateById(result.id);
+  }
+
+// recruitment-backend/utils/database.js - Replace the updateFormTemplate method
+
+async updateFormTemplate(templateId, updates, updatedBy) {
+  return new Promise((resolve, reject) => {
+    // Build the update query dynamically
+    const updateFields = [];
+    const params = [];
+    
+    if (updates.name !== undefined) {
+      updateFields.push('name = ?');
+      params.push(updates.name);
+    }
+    
+    if (updates.description !== undefined) {
+      updateFields.push('description = ?');
+      params.push(updates.description);
+    }
+    
+    if (updates.fields !== undefined) {
+      updateFields.push('fields = ?');
+      const fieldsJson = typeof updates.fields === 'string' 
+        ? updates.fields 
+        : JSON.stringify(updates.fields);
+      params.push(fieldsJson);
+    }
+    
+    if (updates.is_active !== undefined) {
+      updateFields.push('is_active = ?');
+      params.push(updates.is_active ? 1 : 0);
+    }
+    
+    // Always update the timestamp and updater
+    updateFields.push('updated_at = datetime("now")');
+    updateFields.push('updated_by = ?');
+    params.push(updatedBy || 'system');
+    
+    // Add the template ID at the end
+    params.push(templateId);
+    
+    const query = `
+      UPDATE form_templates 
+      SET ${updateFields.join(', ')}
+      WHERE id = ? AND deleted = 0
+    `;
+    
+    this.db.run(query, params, (err) => {
+      if (err) {
+        console.error('Error updating template:', err);
+        reject(err);
+      } else {
+        // Fetch and return the updated template
+        this.get('SELECT * FROM form_templates WHERE id = ?', [templateId])
+          .then(template => {
+            resolve({
+              success: true,
+              template,
+              id: templateId
+            });
+          })
+          .catch(reject);
+      }
+    });
+  });
+}
+
+  async deleteFormTemplate(templateId) {
+    const query = `
+      UPDATE form_templates 
+      SET deleted = 1, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `;
+    
+    const result = await this.run(query, [templateId]);
+    return { success: result.changes > 0 };
+  }
+
+  // ========== FORM METHODS (WITH PROPER JSON HANDLING) ==========
+
+async createForm(formData) {
     const {
-      name,
-      description,
-      fields,
-      settings,
-      created_by
-    } = templateData;
+      token,
+      templateId,
+      caseId,
+      candidateEmail,
+      candidateName,
+      senderEmail,
+      fields
+    } = formData;
 
     return new Promise((resolve, reject) => {
+      // Set expiration date (14 days from now)
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 14);
+
       const query = `
-        INSERT INTO form_templates (
-          name, description, fields, settings, 
-          created_by, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        INSERT INTO forms (
+          token, template_id, case_id, 
+          candidate_email, candidate_name, sender_email,
+          fields, status, created_date, expires_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'created', datetime('now'), ?)
       `;
 
       this.db.run(query, [
-        name,
-        description || '',
+        token,
+        templateId,
+        caseId || null,
+        candidateEmail,
+        candidateName,
+        senderEmail,
         JSON.stringify(fields || []),
-        JSON.stringify(settings || {}),
-        created_by
+        expiresAt.toISOString()
       ], function(err) {
-        if (err) reject(err);
-        else {
-          // Get the newly created template
-          this.getFormTemplateById(this.lastID)
-            .then(resolve)
-            .catch(reject);
+        if (err) {
+          console.error('Error creating form:', err);
+          reject(err);
+        } else {
+          resolve({ 
+            id: this.lastID, 
+            token: token,
+            success: true 
+          });
         }
-      }.bind(this));
+      });
     });
   }
 
-  updateFormTemplate(templateId, updates) {
-    return new Promise(async (resolve, reject) => {
-      try {
-        const current = await this.getFormTemplateById(templateId);
-        if (!current) {
-          return reject(new Error('Template not found'));
-        }
-
-        const {
-          name = current.name,
-          description = current.description,
-          fields = current.fields,
-          settings = current.settings,
-          updated_by
-        } = updates;
-
-        const query = `
-          UPDATE form_templates 
-          SET name = ?, description = ?, fields = ?, settings = ?,
-              updated_at = datetime('now'), updated_by = ?
-          WHERE id = ? AND deleted = 0
-        `;
-
-        this.db.run(query, [
-          name,
-          description,
-          typeof fields === 'string' ? fields : JSON.stringify(fields),
-          typeof settings === 'string' ? settings : JSON.stringify(settings),
-          updated_by,
-          templateId
-        ], (err) => {
-          if (err) reject(err);
-          else {
-            this.getFormTemplateById(templateId)
-              .then(resolve)
-              .catch(reject);
-          }
-        });
-      } catch (error) {
-        reject(error);
-      }
-    });
-  }
-
-  deleteFormTemplate(templateId) {
+ async getFormByToken(token) {
     return new Promise((resolve, reject) => {
       const query = `
-        UPDATE form_templates 
-        SET deleted = 1, updated_at = datetime('now')
-        WHERE id = ?
+        SELECT f.*, t.name as template_name, t.fields as template_fields
+        FROM forms f
+        LEFT JOIN form_templates t ON f.template_id = t.id
+        WHERE f.token = ?
       `;
       
-      this.db.run(query, [templateId], function(err) {
+      this.db.get(query, [token], (err, row) => {
+        if (err) reject(err);
+        else {
+          if (row) {
+            // Parse fields - prefer form fields, fallback to template fields
+            try {
+              if (row.fields) {
+                row.fields = typeof row.fields === 'string' ? JSON.parse(row.fields) : row.fields;
+              } else if (row.template_fields) {
+                row.fields = typeof row.template_fields === 'string' ? JSON.parse(row.template_fields) : row.template_fields;
+              } else {
+                row.fields = [];
+              }
+            } catch (e) {
+              console.error('Error parsing fields:', e);
+              row.fields = [];
+            }
+          }
+          resolve(row);
+        }
+      });
+    });
+  }
+
+async updateFormStatus(token, status, additionalData = {}) {
+    return new Promise((resolve, reject) => {
+      let updateFields = [`status = ?`];
+      let params = [status];
+      
+      if (status === 'sent') {
+        updateFields.push('sent_date = datetime("now")');
+      } else if (status === 'opened') {
+        updateFields.push('opened_date = datetime("now")');
+      } else if (status === 'completed') {
+        updateFields.push('completed_date = datetime("now")');
+      }
+      
+      if (additionalData.response_data) {
+        updateFields.push('response_data = ?');
+        params.push(JSON.stringify(additionalData.response_data));
+      }
+      
+      params.push(token);
+      
+      const query = `UPDATE forms SET ${updateFields.join(', ')} WHERE token = ?`;
+      
+      this.db.run(query, params, function(err) {
         if (err) reject(err);
         else resolve({ success: this.changes > 0 });
       });
     });
   }
+  // ========== RESPONSE METHODS (WITH PROPER JSON HANDLING) ==========
 
-  // ========== RESPONSE METHODS ==========
-
-  getResponses(filters = {}) {
+  async getResponses(filters = {}) {
     return new Promise((resolve, reject) => {
       let query = `
         SELECT 
           cr.*,
-          ft.name as template_name
+          ft.name as template_name,
+          ft.fields as template_fields
         FROM candidate_responses cr
         LEFT JOIN form_templates ft ON cr.template_id = ft.id
         WHERE 1=1
@@ -387,78 +527,88 @@ class Database {
       
       this.db.all(query, params, (err, rows) => {
         if (err) reject(err);
-        else resolve(rows);
+        else {
+          // Parse response_data for each row
+          const parsedRows = rows.map(row => {
+            try {
+              if (row.response_data) {
+                row.response_data = typeof row.response_data === 'string' 
+                  ? JSON.parse(row.response_data) 
+                  : row.response_data;
+              }
+              if (row.template_fields) {
+                row.template_fields = typeof row.template_fields === 'string'
+                  ? JSON.parse(row.template_fields)
+                  : row.template_fields;
+              }
+            } catch (e) {
+              console.error('Error parsing row data:', e);
+            }
+            return row;
+          });
+          resolve(parsedRows);
+        }
       });
     });
   }
 
-  getResponseById(responseId) {
-    return new Promise((resolve, reject) => {
-      const query = `
-        SELECT 
-          cr.*,
-          ft.name as template_name,
-          ft.fields as template_fields
-        FROM candidate_responses cr
-        LEFT JOIN form_templates ft ON cr.template_id = ft.id
-        WHERE cr.id = ?
-      `;
-      
-      this.db.get(query, [responseId], (err, row) => {
-        if (err) reject(err);
-        else resolve(row);
-      });
-    });
+  async getResponseById(responseId) {
+    const query = `
+      SELECT 
+        cr.*,
+        ft.name as template_name,
+        ft.fields as template_fields
+      FROM candidate_responses cr
+      LEFT JOIN form_templates ft ON cr.template_id = ft.id
+      WHERE cr.id = ? AND cr.deleted = 0
+    `;
+    
+    const row = await this.get(query, [responseId]);
+    return this.parseJsonFields(row, ['response_data', 'template_fields']);
   }
 
-  createResponse(responseData) {
+async saveResponse(responseData) {
     const {
-      template_id,
-      form_token,
-      response_data,
-      candidate_name,
-      candidate_email,
-      candidate_phone,
-      ip_address,
-      user_agent
+      formToken,
+      templateId,
+      candidateEmail,
+      candidateName,
+      responses,
+      ip,
+      userAgent
     } = responseData;
 
     return new Promise((resolve, reject) => {
       const query = `
         INSERT INTO candidate_responses (
-          template_id, form_token, response_data,
-          candidate_name, candidate_email, candidate_phone,
-          ip_address, user_agent, submitted_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          form_token, template_id, candidate_email, candidate_name,
+          response_data, ip_address, user_agent, submitted_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
       `;
 
       this.db.run(query, [
-        template_id,
-        form_token || null,
-        JSON.stringify(response_data || {}),
-        candidate_name || 'Unknown',
-        candidate_email || null,
-        candidate_phone || null,
-        ip_address || null,
-        user_agent || null
+        formToken,
+        templateId,
+        candidateEmail,
+        candidateName,
+        JSON.stringify(responses),
+        ip,
+        userAgent
       ], function(err) {
-        if (err) reject(err);
-        else {
-          this.getResponseById(this.lastID)
-            .then(resolve)
-            .catch(reject);
+        if (err) {
+          reject(err);
+        } else {
+          resolve({ id: this.lastID });
         }
-      }.bind(this));
+      });
     });
   }
 
-  markResponseAsProcessed(responseId, processedBy) {
+  async markResponseProcessed(responseId, processedBy) {
     return new Promise((resolve, reject) => {
       const query = `
         UPDATE candidate_responses 
-        SET processed = 1, 
-            processed_by = ?,
-            processed_at = datetime('now')
+        SET processed = 1, processed_by = ?, processed_at = datetime('now')
         WHERE id = ?
       `;
       
@@ -469,117 +619,15 @@ class Database {
     });
   }
 
-  updateResponseWithCandidate(responseId, candidateId) {
-    return new Promise((resolve, reject) => {
-      const query = `
-        UPDATE candidate_responses 
-        SET candidate_id = ?,
-            processed = 1,
-            processed_at = datetime('now')
-        WHERE id = ?
-      `;
-      
-      this.db.run(query, [candidateId, responseId], function(err) {
-        if (err) reject(err);
-        else resolve({ success: this.changes > 0 });
-      });
-    });
-  }
+  // ========== CANDIDATE METHODS (WITH PROPER JSON HANDLING) ==========
 
-  getResponsesForExport(filters = {}) {
-    return new Promise(async (resolve, reject) => {
-      try {
-        const responses = await this.getResponses(filters);
-        
-        // Flatten response data for CSV export
-        const exportData = responses.map(response => {
-          const data = JSON.parse(response.response_data || '{}');
-          return {
-            id: response.id,
-            submitted_at: response.submitted_at,
-            candidate_name: response.candidate_name,
-            candidate_email: response.candidate_email,
-            candidate_phone: response.candidate_phone,
-            template_name: response.template_name,
-            processed: response.processed ? 'Yes' : 'No',
-            ...data
-          };
-        });
-        
-        resolve(exportData);
-      } catch (error) {
-        reject(error);
-      }
-    });
-  }
-
-  // ========== FORM TOKEN METHODS ==========
-
-  createFormToken(templateId, expiresIn = 14) {
-    const token = this.generateToken();
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + expiresIn);
-    
-    return new Promise((resolve, reject) => {
-      const query = `
-        INSERT INTO form_tokens (
-          token, template_id, expires_at, created_at
-        ) VALUES (?, ?, ?, datetime('now'))
-      `;
-      
-      this.db.run(query, [token, templateId, expiresAt.toISOString()], (err) => {
-        if (err) reject(err);
-        else resolve({ token, expires_at: expiresAt.toISOString() });
-      });
-    });
-  }
-
-  validateFormToken(token) {
-    return new Promise((resolve, reject) => {
-      const query = `
-        SELECT ft.*, t.* 
-        FROM form_tokens ft
-        JOIN form_templates t ON ft.template_id = t.id
-        WHERE ft.token = ? 
-          AND ft.used = 0 
-          AND datetime(ft.expires_at) > datetime('now')
-          AND t.deleted = 0
-      `;
-      
-      this.db.get(query, [token], (err, row) => {
-        if (err) reject(err);
-        else resolve(row || null);
-      });
-    });
-  }
-
-  markTokenAsUsed(token) {
-    return new Promise((resolve, reject) => {
-      const query = `
-        UPDATE form_tokens 
-        SET used = 1, used_at = datetime('now')
-        WHERE token = ?
-      `;
-      
-      this.db.run(query, [token], function(err) {
-        if (err) reject(err);
-        else resolve({ success: this.changes > 0 });
-      });
-    });
-  }
-
-  generateToken() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let token = '';
-    for (let i = 0; i < 32; i++) {
-      token += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return token;
-  }
-
-  // ========== CANDIDATE METHODS ==========
-  
   async createCandidate(candidateData) {
+    // Prepare data with JSON stringification for skills
+    const preparedData = this.stringifyJsonFields(
+      candidateData,
+      ['skills']
+    );
+
     const query = `
       INSERT INTO candidates (
         name, email, phone, linkedin_url, current_location,
@@ -591,25 +639,25 @@ class Database {
     `;
     
     const params = [
-      candidateData.name,
-      candidateData.email,
-      candidateData.phone || null,
-      candidateData.linkedin_url || null,
-      candidateData.current_location || null,
-      candidateData.visa_status || null,
-      candidateData.years_experience || null,
-      JSON.stringify(candidateData.skills || []),
-      candidateData.education || null,
-      candidateData.current_employer || null,
-      candidateData.status || 'Active',
-      candidateData.source || 'Manual',
-      candidateData.source_id || null,
-      candidateData.referred_by || null,
-      candidateData.availability || null,
-      candidateData.expected_salary || null,
-      candidateData.notes || null,
-      candidateData.resume_url || null,
-      candidateData.created_by
+      preparedData.name,
+      preparedData.email,
+      preparedData.phone || null,
+      preparedData.linkedin_url || null,
+      preparedData.current_location || null,
+      preparedData.visa_status || null,
+      preparedData.years_experience || null,
+      preparedData.skills,
+      preparedData.education || null,
+      preparedData.current_employer || null,
+      preparedData.status || 'Active',
+      preparedData.source || 'Manual',
+      preparedData.source_id || null,
+      preparedData.referred_by || null,
+      preparedData.availability || null,
+      preparedData.expected_salary || null,
+      preparedData.notes || null,
+      preparedData.resume_url || null,
+      preparedData.created_by
     ];
     
     return this.run(query, params);
@@ -619,15 +667,14 @@ class Database {
     const fields = [];
     const params = [];
     
+    // Prepare updates with JSON stringification if needed
+    const preparedUpdates = this.stringifyJsonFields(updates, ['skills']);
+    
     // Build dynamic update query
-    Object.keys(updates).forEach(key => {
+    Object.keys(preparedUpdates).forEach(key => {
       if (key !== 'id' && key !== 'created_at' && key !== 'created_by') {
         fields.push(`${key} = ?`);
-        if (key === 'skills' && Array.isArray(updates[key])) {
-          params.push(JSON.stringify(updates[key]));
-        } else {
-          params.push(updates[key]);
-        }
+        params.push(preparedUpdates[key]);
       }
     });
     
@@ -646,15 +693,7 @@ class Database {
       [candidateId]
     );
     
-    if (candidate && candidate.skills) {
-      try {
-        candidate.skills = JSON.parse(candidate.skills);
-      } catch {
-        candidate.skills = [];
-      }
-    }
-    
-    return candidate;
+    return this.parseJsonFields(candidate, ['skills']);
   }
 
   async getCandidateByEmail(email) {
@@ -663,15 +702,7 @@ class Database {
       [email]
     );
     
-    if (candidate && candidate.skills) {
-      try {
-        candidate.skills = JSON.parse(candidate.skills);
-      } catch {
-        candidate.skills = [];
-      }
-    }
-    
-    return candidate;
+    return this.parseJsonFields(candidate, ['skills']);
   }
 
   async getCandidates(filters = {}) {
@@ -703,11 +734,8 @@ class Database {
     
     const candidates = await this.all(query, params);
     
-    // Parse skills JSON for each candidate
-    return candidates.map(c => ({
-      ...c,
-      skills: c.skills ? JSON.parse(c.skills) : []
-    }));
+    // Parse JSON fields for each candidate
+    return candidates.map(c => this.parseJsonFields(c, ['skills']));
   }
 
   async getCandidateStats() {
@@ -715,6 +743,7 @@ class Database {
       SELECT 
         COUNT(*) as total,
         SUM(CASE WHEN status = 'Active' THEN 1 ELSE 0 END) as active,
+        SUM(CASE WHEN status = 'Inactive' THEN 1 ELSE 0 END) as inactive,
         SUM(CASE WHEN status = 'Placed' THEN 1 ELSE 0 END) as placed,
         SUM(CASE WHEN status = 'On Hold' THEN 1 ELSE 0 END) as onHold
       FROM candidates
@@ -724,6 +753,12 @@ class Database {
   }
 
   async logCandidateActivity(candidateId, activityType, description, performedBy, changes = null) {
+    // Prepare data with JSON stringification for changes
+    const preparedData = this.stringifyJsonFields(
+      { changes },
+      ['changes']
+    );
+
     const query = `
       INSERT INTO candidate_activities 
       (candidate_id, activity_type, description, performed_by, changes)
@@ -735,7 +770,7 @@ class Database {
       activityType,
       description,
       performedBy,
-      changes ? JSON.stringify(changes) : null
+      preparedData.changes
     ]);
   }
 
@@ -745,18 +780,13 @@ class Database {
       [candidateId]
     );
     
-    return activities.map(a => ({
-      ...a,
-      changes: a.changes ? JSON.parse(a.changes) : null
-    }));
+    // Parse JSON fields for each activity
+    return activities.map(a => this.parseJsonFields(a, ['changes']));
   }
 
   async createCandidateFromResponse(responseId, createdBy) {
     // Get the response data
-    const response = await this.get(
-      'SELECT * FROM candidate_responses WHERE id = ?',
-      [responseId]
-    );
+    const response = await this.getResponseById(responseId);
     
     if (!response) {
       throw new Error('Response not found');
@@ -770,8 +800,8 @@ class Database {
       }
     }
     
-    // Parse response data
-    const responseData = JSON.parse(response.response_data || '{}');
+    // Response data is already parsed by getResponseById
+    const responseData = response.response_data || {};
     
     // Map response fields to candidate fields
     const candidateData = {
@@ -800,7 +830,7 @@ class Database {
     
     // Update the response to link it to the candidate
     await this.run(
-      'UPDATE candidate_responses SET candidate_id = ?, processed = 1, processed_at = datetime("now") WHERE id = ?',
+      'UPDATE candidate_responses SET candidate_id = ?, processed = 1, processed_at = CURRENT_TIMESTAMP WHERE id = ?',
       [result.id, responseId]
     );
     
@@ -831,7 +861,90 @@ class Database {
     return [];
   }
 
-  // Helper methods
+  // ========== OTHER METHODS ==========
+
+  async saveOAuthToken(email, provider, tokens) {
+    const query = `
+      INSERT OR REPLACE INTO oauth_tokens 
+      (user_email, provider, access_token, refresh_token, expires_at)
+      VALUES (?, ?, ?, ?, ?)
+    `;
+    
+    const expiresAt = tokens.expiry_date 
+      ? new Date(tokens.expiry_date).toISOString()
+      : new Date(Date.now() + 3600000).toISOString();
+    
+    return this.run(query, [
+      email,
+      provider,
+      tokens.access_token,
+      tokens.refresh_token,
+      expiresAt
+    ]);
+  }
+
+  async getOAuthToken(email, provider) {
+    return this.get(
+      'SELECT * FROM oauth_tokens WHERE user_email = ? AND provider = ?',
+      [email, provider]
+    );
+  }
+
+  async logActivity(caseId, formToken, action, description, userEmail) {
+    return new Promise((resolve, reject) => {
+      const query = `
+        INSERT INTO activity_logs (case_id, form_token, action, description, user_email)
+        VALUES (?, ?, ?, ?, ?)
+      `;
+      
+      this.db.run(query, [caseId, formToken, action, description, userEmail], function(err) {
+        if (err) {
+          console.error('Error logging activity:', err);
+          // Don't reject, just resolve with false
+          resolve({ success: false });
+        } else {
+          resolve({ success: true, id: this.lastID });
+        }
+      });
+    });
+  }
+
+  async createNotification(notificationData) {
+    // Prepare data with JSON stringification
+    const preparedData = this.stringifyJsonFields(
+      notificationData,
+      ['data']
+    );
+
+    const query = `
+      INSERT INTO notifications 
+      (user_email, type, title, message, data, priority, action_url)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `;
+    
+    return this.run(query, [
+      preparedData.userEmail,
+      preparedData.type,
+      preparedData.title,
+      preparedData.message,
+      preparedData.data,
+      preparedData.priority || 'normal',
+      preparedData.actionUrl
+    ]);
+  }
+
+  async getUnreadNotifications(userEmail) {
+    const notifications = await this.all(
+      'SELECT * FROM notifications WHERE user_email = ? AND read = 0 ORDER BY created_at DESC',
+      [userEmail]
+    );
+    
+    // Parse JSON fields for each notification
+    return notifications.map(n => this.parseJsonFields(n, ['data']));
+  }
+
+  // ========== HELPER METHODS ==========
+  
   get(query, params = []) {
     return new Promise((resolve, reject) => {
       this.db.get(query, params, (err, row) => {
@@ -863,7 +976,7 @@ class Database {
     const defaultTemplate = {
       name: 'Default Candidate Information Form',
       description: 'Standard form for collecting candidate information',
-      fields: JSON.stringify([
+      fields: [
         { id: 'name', label: 'Full Name', type: 'text', required: true, order: 1 },
         { id: 'email', label: 'Email', type: 'email', required: true, order: 2 },
         { id: 'phone', label: 'Phone Number', type: 'tel', required: true, order: 3 },
@@ -879,7 +992,7 @@ class Database {
           options: ['High School', 'Associate', 'Bachelor', 'Master', 'PhD'] },
         { id: 'availability', label: 'When can you start?', type: 'select', required: true, order: 10,
           options: ['Immediate', '2 weeks', '1 month', 'More than 1 month'] }
-      ]),
+      ],
       created_by: 'system',
       is_default: true
     };
@@ -888,17 +1001,10 @@ class Database {
       'SELECT id FROM form_templates WHERE is_default = 1',
       (err, row) => {
         if (!row) {
-          this.db.run(
-            `INSERT INTO form_templates (name, description, fields, created_by, is_default) 
-             VALUES (?, ?, ?, ?, ?)`,
-            [defaultTemplate.name, defaultTemplate.description, defaultTemplate.fields, 
-             defaultTemplate.created_by, defaultTemplate.is_default],
-            (err) => {
-              if (!err) {
-                console.log('✅ Default form template created');
-              }
-            }
-          );
+          // Use the new createFormTemplate method which handles JSON properly
+          this.createFormTemplate(defaultTemplate)
+            .then(() => console.log('✅ Default form template created'))
+            .catch(err => console.error('Error creating default template:', err));
         }
       }
     );

@@ -242,84 +242,106 @@ class FormTemplateService {
   /**
    * Send form to candidate (prepare mailto link)
    */
-  async sendForm(data) {
-    try {
-      const {
-        templateId,
-        candidateEmail,
-        candidateName,
-        caseId,
-        senderEmail,
-        senderName
-      } = data;
-      
-      console.log('sendForm - Received template ID:', templateId); // Debug log
-      
-      // Get template - Make sure we're getting the right one
-      const template = await this.getTemplateById(templateId);
-      if (!template || !template.is_active) {
-        console.error('Template not found or inactive. Template ID:', templateId);
-        throw new Error('Template not found or inactive');
-      }
-      
-      console.log('Using template:', template.name, 'with fields:', template.fields?.length);
-      
-      // Generate unique token
-      const token = this.generateFormToken();
-      
-      // Create form record with the correct template fields
-      await database.createFormTemplate({
-        token,
-        templateId,
-        caseId,
-        candidateEmail,
-        candidateName: candidateName || candidateEmail.split('@')[0],
-        senderEmail,
-        fields: template.fields // Use the template's fields, not default
-      });
-      
-      // Update template usage count
-      await database.run(
-        'UPDATE form_templates SET usage_count = usage_count + 1 WHERE id = ?',
-        [templateId]
-      );
-      
-      // Import emailService
-      const emailService = require('./emailService');
-      
-      // Prepare email data
-      const emailData = await emailService.prepareFormEmail({
-        token,
-        candidateEmail,
-        candidateName,
-        senderEmail,
-        senderName,
-        templateName: template.name
-      });
-      
-      // Log activity
-      await database.logActivity(
-        caseId,
-        token,
-        'form_prepared',
-        `Form prepared for ${candidateEmail} using template "${template.name}"`,
-        senderEmail
-      );
-      
-      return {
-        success: true,
-        token,
-        formUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/candidate-form/${token}`,
-        mailtoLink: emailData.mailtoLink,
-        emailContent: emailData.emailContent,
-        template: template.name
-      };
-    } catch (error) {
-      console.error('Error sending form:', error);
-      throw error;
-    }
-  }
+// recruitment-backend/services/formTemplateService.js - Replace the sendForm method
 
+  /**
+   * Send form to candidate (prepare mailto link)
+   */
+// recruitment-backend/services/formTemplateService.js - Replace the sendForm method
+
+async sendForm(data) {
+  try {
+    const {
+      templateId,
+      candidateEmail,
+      candidateName,
+      caseId,
+      senderEmail,
+      senderName
+    } = data;
+    
+    console.log('sendForm - Received template ID:', templateId);
+    
+    // Get template - ensure we parse the fields correctly
+    const template = await database.get(
+      'SELECT * FROM form_templates WHERE id = ? AND is_active = 1',
+      [templateId]
+    );
+    
+    if (!template) {
+      throw new Error('Template not found or inactive');
+    }
+    
+    // Parse template fields
+    let templateFields;
+    try {
+      templateFields = typeof template.fields === 'string' 
+        ? JSON.parse(template.fields) 
+        : template.fields;
+    } catch (e) {
+      console.error('Error parsing template fields:', e);
+      // Fall back to default if parsing fails
+      const defaultTemplate = await database.get(
+        'SELECT fields FROM form_templates WHERE is_default = 1'
+      );
+      templateFields = JSON.parse(defaultTemplate.fields);
+    }
+    
+    console.log('Using template:', template.name, 'with fields:', templateFields.length);
+    
+    // Generate unique token
+    const token = this.generateFormToken();
+    
+    // Create form record with the template's fields
+    await database.createForm({
+      token,
+      templateId: template.id, // Make sure we're using the right template ID
+      caseId,
+      candidateEmail,
+      candidateName: candidateName || candidateEmail.split('@')[0],
+      senderEmail,
+      fields: templateFields // Store the actual template fields
+    });
+    
+    // Update template usage count
+    await database.run(
+      'UPDATE form_templates SET usage_count = usage_count + 1 WHERE id = ?',
+      [template.id]
+    );
+    
+    // Prepare email
+    const emailService = require('./emailService');
+    const emailData = await emailService.prepareFormEmail({
+      token,
+      candidateEmail,
+      candidateName,
+      senderEmail,
+      senderName,
+      templateName: template.name
+    });
+    
+    // Log activity
+    await database.logActivity(
+      caseId,
+      token,
+      'form_prepared',
+      `Form prepared for ${candidateEmail} using template "${template.name}"`,
+      senderEmail
+    );
+    
+    return {
+      success: true,
+      token,
+      formUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/candidate-form/${token}`,
+      mailtoLink: emailData.mailtoLink,
+      emailContent: emailData.emailContent,
+      template: template.name
+    };
+  } catch (error) {
+    console.error('Error sending form:', error);
+    throw error;
+  }
+}
   /**
    * Get form by token (for candidate to view)
    */
