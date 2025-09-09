@@ -1,6 +1,7 @@
 // recruitment-backend/services/candidateService.js - NEW FILE
 const database = require('../utils/database');
 
+
 class CandidateService {
   /**
    * Get all candidates with filters

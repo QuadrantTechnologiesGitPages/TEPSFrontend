@@ -25,7 +25,7 @@ import PublicCandidateForm from './modules/benchSales/components/CandidateForm/P
 import CandidateManagementList from './modules/benchSales/components/CandidateManagement/CandidateList';
 import CandidateForm from './modules/benchSales/components/CandidateManagement/CandidateForm';
 import CandidateView from './modules/benchSales/components/CandidateManagement/CandidateView';
-
+import CandidateSearch from './modules/benchSales/components/CandidateSearch/CandidateSearch';
 import { Toaster } from 'react-hot-toast';
 import { mockCandidates } from './data/mockData';
 import { searchCandidates } from './utils/candidateMatcher';
@@ -274,6 +274,9 @@ function AppContent() {
             )}
           </>
         );
+        
+      case 'aiSearch':  
+        return <CandidateSearch />;  
 
       case 'responses':
         return <ResponseList />;
@@ -427,6 +430,12 @@ function AppContent() {
           >
             Search & Match
           </button>
+          <button 
+              className={`nav-tab ${currentView === 'aiSearch' ? 'active' : ''}`}
+              onClick={() => setCurrentView('aiSearch')}
+            >
+              AI Search
+            </button>
         </div>
         <div className="user-info-bar">
           <span>Role: {roles.join(', ')}</span>

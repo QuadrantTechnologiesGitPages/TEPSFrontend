@@ -13,6 +13,7 @@ const database = require('./utils/database');
 
 // Import routes
 const authRoutes = require('./routes/auth.routes');
+const searchRoutes = require('./routes/search/searchRoutes');
 const formRoutes = require('./routes/form.routes');
 const webhookRoutes = require('./routes/webhook.routes');
 const formTemplateRoutes = require('./routes/formTemplate.routes');
@@ -61,6 +62,7 @@ app.get('/health', (req, res) => {
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/search', searchRoutes);
 app.use('/api/forms', formRoutes);
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/templates', formTemplateRoutes);
