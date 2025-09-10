@@ -1,33 +1,100 @@
-/* src/modules/benchSales/styles/PublicForm.css */
 
+/* src/modules/benchSales/styles/PublicForm.css */
+/* Quadrant (Black/Purple) Glass-Neon Theme — class names preserved */
+
+/* ==================== THEME TOKENS ==================== */
+:root {
+  --q-bg: #0f0f23;
+  --q-surface: #1a1a2e;
+  --q-card: rgba(255, 255, 255, 0.03);
+  --q-card-strong: rgba(255, 255, 255, 0.06);
+  --q-border: rgba(255, 255, 255, 0.12);
+  --q-border-soft: rgba(255, 255, 255, 0.08);
+  --q-text: #e5e7eb;
+  --q-text-muted: #94a3b8;
+  --q-text-subtle: #64748b;
+
+  --q-gradient: linear-gradient(135deg, #5b5bd6 0%, #8b5cf6 50%, #7c3aed 100%);
+  --q-success: linear-gradient(135deg, #10b981 0%, #14b8a6 100%);
+  --q-info: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+
+  --q-shadow-card: 0 20px 60px rgba(0, 0, 0, 0.55);
+  --q-glow-purple: 0 0 0 2px rgba(139, 92, 246, 0.25), 0 10px 30px rgba(139, 92, 246, 0.25);
+  --q-glass-blur: blur(18px);
+}
+
+/* ==================== CONTAINER ==================== */
 .public-form-container {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: radial-gradient(1000px 600px at 20% 15%, rgba(124, 58, 237, 0.18), transparent 60%),
+              radial-gradient(900px 600px at 80% 80%, rgba(59, 130, 246, 0.15), transparent 60%),
+              linear-gradient(180deg, var(--q-bg) 0%, var(--q-surface) 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: 24px;
+  overflow: hidden;
+  position: relative;
 }
 
+.public-form-container::before {
+  content: '';
+  position: absolute;
+  inset: -50%;
+  background: radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.05), transparent 55%);
+  filter: blur(40px);
+  animation: q-rotate 28s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes q-rotate {
+  0% { transform: rotate(0deg) }
+  100% { transform: rotate(360deg) }
+}
+
+/* ==================== CARD ==================== */
 .public-form {
-  background: white;
+  background: var(--q-card);
+  border: 1px solid var(--q-border);
   border-radius: 20px;
   width: 100%;
-  max-width: 600px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  max-width: 680px;
+  box-shadow: var(--q-shadow-card);
+  overflow: hidden;
+  backdrop-filter: var(--q-glass-blur);
+  color: var(--q-text);
+}
+
+/* ==================== HEADER ==================== */
+.form-header {
+  background: var(--q-gradient);
+  color: #fff;
+  padding: 28px 30px;
+  text-align: center;
+  position: relative;
   overflow: hidden;
 }
 
-.form-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 30px;
-  text-align: center;
+.form-header::after {
+  content: '';
+  position: absolute;
+  top: -60%;
+  right: -60%;
+  width: 160%;
+  height: 160%;
+  background: radial-gradient(circle, rgba(255,255,255,0.12), transparent 60%);
+  animation: q-shimmer 6s ease-in-out infinite;
+}
+
+@keyframes q-shimmer {
+  0%,100% { transform: rotate(0deg) }
+  50% { transform: rotate(180deg) }
 }
 
 .form-header h1 {
-  margin: 0 0 10px 0;
-  font-size: 1.8rem;
+  margin: 0 0 8px 0;
+  font-size: 1.85rem;
+  letter-spacing: -0.02em;
 }
 
 .form-header p {
@@ -35,261 +102,252 @@
   opacity: 0.9;
 }
 
+/* ==================== BODY ==================== */
 .form-body {
-  padding: 30px;
-  max-height: 60vh;
+  padding: 26px 30px;
+  max-height: 64vh;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(139, 92, 246, 0.35) transparent;
 }
 
-.form-field {
-  margin-bottom: 20px;
+.form-body::-webkit-scrollbar { width: 10px; }
+.form-body::-webkit-scrollbar-track { background: transparent; }
+.form-body::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%);
+  border-radius: 10px;
 }
+
+/* ==================== FIELDS ==================== */
+.form-field { margin-bottom: 18px; }
 
 .form-field label {
   display: block;
   margin-bottom: 8px;
-  font-weight: 500;
-  color: #4a5568;
+  font-weight: 600;
+  color: var(--q-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.8rem;
 }
 
 .form-field .required {
-  color: #f56565;
+  color: #f87171;
   margin-left: 4px;
+  font-weight: 700;
 }
 
 .form-field input,
 .form-field select,
 .form-field textarea {
   width: 100%;
-  padding: 10px 15px;
-  border: 2px solid #e2e8f0;
-  border-radius: 8px;
-  font-size: 15px;
-  transition: all 0.3s;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--q-border-soft);
+  border-radius: 10px;
+  font-size: 0.95rem;
+  color: var(--q-text);
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+  backdrop-filter: var(--q-glass-blur);
 }
+
+.form-field input::placeholder,
+.form-field textarea::placeholder { color: var(--q-text-subtle); }
 
 .form-field input:focus,
 .form-field select:focus,
 .form-field textarea:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: rgba(139, 92, 246, 0.55);
+  box-shadow: var(--q-glow-purple);
+  background: rgba(255, 255, 255, 0.07);
 }
 
 .form-field input.error,
 .form-field select.error,
 .form-field textarea.error {
-  border-color: #f56565;
+  border: 1px solid rgba(239, 68, 68, 0.6);
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15);
+  background: rgba(239, 68, 68, 0.06);
 }
 
-.error-message {
-  color: #f56565;
-  font-size: 0.85rem;
-  margin-top: 5px;
+/* Inline error (scoped) */
+.form-field .error-message {
   display: block;
+  color: #f87171;
+  font-size: 0.8rem;
+  margin-top: 6px;
+  animation: q-fade 0.25s ease;
 }
 
+/* ==================== FOOTER BUTTONS ==================== */
 .form-footer {
-  padding: 20px 30px;
-  background: #f8fafc;
+  padding: 18px 30px;
+  background: rgba(255, 255, 255, 0.02);
+  border-top: 1px solid var(--q-border);
   display: flex;
-  gap: 15px;
+  gap: 12px;
   justify-content: center;
 }
 
 .btn-save,
 .btn-submit {
-  padding: 12px 30px;
+  padding: 12px 28px;
   border: none;
-  border-radius: 8px;
-  font-size: 16px;
-  font-weight: 600;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 700;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: transform 0.2s, box-shadow 0.2s, background 0.2s, border-color 0.2s;
+  letter-spacing: 0.02em;
 }
 
 .btn-save {
-  background: white;
-  color: #667eea;
-  border: 2px solid #667eea;
+  background: transparent;
+  color: #c4b5fd;
+  border: 1px solid rgba(139, 92, 246, 0.6);
 }
 
 .btn-save:hover {
-  background: #f0f4ff;
+  background: rgba(139, 92, 246, 0.12);
+  box-shadow: var(--q-glow-purple);
+  transform: translateY(-1px);
 }
 
 .btn-submit {
-  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  background: var(--q-success);
   color: white;
+  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.35);
 }
 
 .btn-submit:hover {
   transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(72, 187, 120, 0.3);
+  box-shadow: 0 12px 28px rgba(16, 185, 129, 0.45);
 }
 
+/* ==================== INFO RIBBON ==================== */
 .form-info {
-  padding: 20px 30px;
-  background: #f8fafc;
-  border-top: 1px solid #e2e8f0;
+  padding: 18px 30px;
+  background: rgba(255, 255, 255, 0.02);
+  border-top: 1px solid var(--q-border);
   text-align: center;
   font-size: 0.85rem;
-  color: #718096;
+  color: var(--q-text-muted);
 }
 
+/* ==================== FEEDBACK STATES (Success/Error/Loading) ==================== */
 .success-message,
 .error-message {
-  background: white;
-  padding: 60px 40px;
+  background: var(--q-card);
+  border: 1px solid var(--q-border);
+  padding: 44px 36px;
   border-radius: 20px;
   text-align: center;
-  max-width: 500px;
+  max-width: 560px;
+  margin: 0 auto;
+  color: var(--q-text);
+  box-shadow: var(--q-shadow-card);
+  backdrop-filter: var(--q-glass-blur);
 }
 
 .success-message h2 {
-  color: #48bb78;
-  margin-bottom: 20px;
+  color: #34d399;
+  margin-bottom: 16px;
 }
 
 .error-message h2 {
-  color: #f56565;
-  margin-bottom: 20px;
+  color: #f87171;
+  margin-bottom: 16px;
 }
 
 .loading {
-  background: white;
-  padding: 40px;
-  border-radius: 20px;
+  background: var(--q-card);
+  border: 1px solid var(--q-border);
+  padding: 36px;
+  border-radius: 16px;
   text-align: center;
-}
-/* Success Message Animations */
-.success-message {
-  background: white;
-  border-radius: 12px;
-  padding: 40px;
-  max-width: 600px;
-  margin: 0 auto;
-  text-align: center;
-  box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+  color: var(--q-text-muted);
+  box-shadow: var(--q-shadow-card);
+  backdrop-filter: var(--q-glass-blur);
 }
 
-.success-message.animate-in {
-  animation: slideUp 0.5s ease;
+/* Success animation scope */
+.success-message.animate-in { animation: q-slideUp 0.5s ease; }
+@keyframes q-slideUp {
+  from { opacity: 0; transform: translateY(20px) }
+  to   { opacity: 1; transform: translateY(0) }
 }
 
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.success-icon {
-  margin: 0 auto 30px;
-}
-
+.success-icon { margin: 0 auto 28px; }
 .checkmark {
   stroke-dasharray: 100;
   stroke-dashoffset: 100;
-  animation: draw 0.8s ease forwards 0.3s;
+  animation: q-draw 0.8s ease forwards 0.3s;
 }
+@keyframes q-draw { to { stroke-dashoffset: 0 } }
 
-@keyframes draw {
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
-.success-message h2 {
-  color: #4CAF50;
-  margin-bottom: 15px;
-  font-size: 32px;
-}
-
-.main-message {
-  font-size: 18px;
-  color: #555;
-  margin-bottom: 30px;
-}
+.main-message { font-size: 1rem; color: var(--q-text-muted); margin-bottom: 24px; }
 
 .next-steps {
-  background: #f5f5f5;
-  border-radius: 8px;
-  padding: 25px;
-  margin: 30px 0;
+  background: rgba(255, 255, 255, 0.035);
+  border-radius: 10px;
+  padding: 22px;
+  margin: 26px 0;
   text-align: left;
+  border: 1px dashed var(--q-border);
 }
 
 .next-steps h3 {
-  color: #333;
-  margin-bottom: 15px;
-  font-size: 18px;
+  color: var(--q-text);
+  margin-bottom: 12px;
+  font-size: 1rem;
 }
 
-.next-steps ul {
-  list-style: none;
-  padding: 0;
-}
-
+.next-steps ul { list-style: none; padding: 0; margin: 0; }
 .next-steps li {
-  padding: 10px 0;
-  padding-left: 30px;
+  padding: 10px 0 10px 28px;
   position: relative;
-  color: #666;
+  color: var(--q-text-muted);
 }
-
 .next-steps li:before {
   content: "✓";
   position: absolute;
   left: 0;
-  color: #4CAF50;
-  font-weight: bold;
+  color: #34d399;
+  font-weight: 800;
 }
 
-.contact-info {
-  color: #888;
-  font-size: 14px;
-  margin-top: 20px;
-}
+.contact-info { color: var(--q-text-subtle); font-size: 0.85rem; margin-top: 18px; }
 
-/* Inline Error */
+/* Inline Error block (global) */
 .inline-error {
-  background: #fee;
-  border: 1px solid #fcc;
-  color: #c00;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #fda4af;
   padding: 12px;
-  border-radius: 6px;
-  margin-bottom: 20px;
-  animation: shake 0.3s ease;
+  border-radius: 8px;
+  margin-bottom: 18px;
+  animation: q-shake 0.3s ease;
+}
+@keyframes q-shake {
+  0%, 100% { transform: translateX(0) }
+  25% { transform: translateX(-5px) }
+  75% { transform: translateX(5px) }
 }
 
-@keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-5px); }
-  75% { transform: translateX(5px); }
+/* General fade-in used above */
+@keyframes q-fade { from { opacity: 0 } to { opacity: 1 } }
+
+/* ==================== ACCESSIBILITY: FOCUS VISIBLE ==================== */
+*:focus-visible {
+  outline: 2px solid rgba(139, 92, 246, 0.6);
+  outline-offset: 2px;
+  border-radius: 10px;
 }
 
-/* Field-level error improvements */
-.form-field input.error,
-.form-field select.error,
-.form-field textarea.error {
-  border: 2px solid #e74c3c;
-  background: #fff5f5;
-}
-
-.form-field .error-message {
-  display: block;
-  color: #e74c3c;
-  font-size: 13px;
-  margin-top: 5px;
-  animation: fadeIn 0.3s ease;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+/* ==================== RESPONSIVE ==================== */
+@media (max-width: 768px) {
+  .public-form-container { padding: 16px; }
+  .form-header h1 { font-size: 1.5rem; }
+  .form-body { max-height: 62vh; }
 }

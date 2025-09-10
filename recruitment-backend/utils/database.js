@@ -226,23 +226,45 @@ class Database {
   /**
    * Parse JSON fields in a row based on field definitions
    */
-  parseJsonFields(row, jsonFields = []) {
-    if (!row) return row;
-    
-    const parsed = { ...row };
-    jsonFields.forEach(field => {
-      if (parsed[field] && typeof parsed[field] === 'string') {
-        try {
+/**
+ * Parse JSON fields in a row based on field definitions
+ */
+parseJsonFields(row, jsonFields = []) {
+  if (!row) return row;
+  
+  const parsed = { ...row };
+  jsonFields.forEach(field => {
+    if (parsed[field] && typeof parsed[field] === 'string') {
+      try {
+        // First check if it's already a valid JSON string
+        if (parsed[field].startsWith('[') || parsed[field].startsWith('{')) {
           parsed[field] = JSON.parse(parsed[field]);
-        } catch (e) {
-          console.error(`Failed to parse JSON field ${field}:`, e);
-          // Keep original value if parsing fails
+        } else {
+          // If it's a comma-separated string (for skills), convert to array
+          if (field === 'skills') {
+            parsed[field] = parsed[field]
+              .split(',')
+              .map(s => s.trim())
+              .filter(s => s.length > 0);
+          } else {
+            // Keep original value for other fields
+            // Don't try to parse non-JSON strings
+          }
+        }
+      } catch (e) {
+        console.error(`Failed to parse JSON field ${field}:`, e);
+        // For skills, try to convert comma-separated string to array
+        if (field === 'skills' && typeof parsed[field] === 'string') {
+          parsed[field] = parsed[field]
+            .split(',')
+            .map(s => s.trim())
+            .filter(s => s.length > 0);
         }
       }
-    });
-    return parsed;
-  }
-
+    }
+  });
+  return parsed;
+}
   /**
    * Stringify JSON fields before storing
    */

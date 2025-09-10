@@ -1,7 +1,8 @@
-// recruitment-backend/routes/candidate.routes.js - NEW FILE
+// recruitment-backend/routes/candidate.routes.js - UPDATED WITH SYNC ENDPOINT
 const express = require('express');
 const router = express.Router();
 const candidateService = require('../services/candidateService');
+const candidateSearchSync = require('../services/candidateSearchSync');
 
 // ==================== CANDIDATE ROUTES ====================
 
@@ -53,6 +54,102 @@ router.get('/stats', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch statistics'
+    });
+  }
+});
+
+/**
+ * 🔥 NEW: POST /api/candidates/sync-search
+ * Manually sync candidates to Azure Search
+ */
+router.post('/sync-search', async (req, res) => {
+  try {
+    const { candidateIds, syncAll } = req.body;
+    
+    let result;
+    
+    if (syncAll) {
+      // Sync all candidates
+      console.log('📊 Starting full sync of all candidates to Azure Search...');
+      result = await candidateSearchSync.syncAllCandidates();
+      
+      res.json({
+        success: result,
+        message: result 
+          ? 'All candidates synced to Azure Search successfully' 
+          : 'Sync completed with some errors (check logs)',
+        type: 'full'
+      });
+    } else if (candidateIds && Array.isArray(candidateIds)) {
+      // Sync specific candidates
+      console.log(`📊 Syncing ${candidateIds.length} specific candidates to Azure Search...`);
+      result = await candidateSearchSync.syncCandidateBatch(candidateIds);
+      
+      res.json({
+        success: true,
+        message: `${candidateIds.length} candidates synced to Azure Search`,
+        type: 'batch',
+        candidateIds
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        error: 'Provide either syncAll=true or candidateIds array'
+      });
+    }
+  } catch (error) {
+    console.error('Error syncing to Azure Search:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to sync with Azure Search'
+    });
+  }
+});
+
+/**
+ * 🔥 NEW: GET /api/candidates/:id/verify-search
+ * Verify if a candidate exists in Azure Search
+ */
+router.get('/:id/verify-search', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const existsInSearch = await candidateSearchSync.verifyCandidateInSearch(id);
+    
+    if (existsInSearch) {
+      res.json({
+        success: true,
+        exists: true,
+        message: `Candidate ${id} exists in Azure Search`
+      });
+    } else {
+      // Try to sync this specific candidate
+      const candidate = await candidateService.getCandidateById(id);
+      
+      if (candidate) {
+        const syncResult = await candidateSearchSync.onCandidateCreated(candidate);
+        
+        res.json({
+          success: true,
+          exists: false,
+          synced: syncResult,
+          message: syncResult 
+            ? `Candidate ${id} was missing but has been synced now`
+            : `Candidate ${id} not found in search and sync failed`
+        });
+      } else {
+        res.json({
+          success: false,
+          exists: false,
+          message: `Candidate ${id} not found in database`
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Error verifying search:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to verify search status'
     });
   }
 });
@@ -141,7 +238,8 @@ router.post('/', async (req, res) => {
       success: true,
       message: 'Candidate created successfully',
       candidateId: result.candidateId,
-      candidate: result.candidate
+      candidate: result.candidate,
+      searchIndexed: true  // 🔥 NEW: Indicate that it's been indexed
     });
   } catch (error) {
     console.error('Error creating candidate:', error);
@@ -185,7 +283,8 @@ router.post('/from-response', async (req, res) => {
       success: true,
       message: 'Candidate created from response',
       candidateId: result.candidateId,
-      candidate: result.candidate
+      candidate: result.candidate,
+      searchIndexed: true  // 🔥 NEW: Indicate that it's been indexed
     });
   } catch (error) {
     console.error('Error creating candidate from response:', error);
@@ -224,7 +323,8 @@ router.put('/:id', async (req, res) => {
     res.json({
       success: true,
       message: 'Candidate updated successfully',
-      candidate: result.candidate
+      candidate: result.candidate,
+      searchIndexed: true  // 🔥 NEW: Indicate that it's been indexed
     });
   } catch (error) {
     console.error('Error updating candidate:', error);
@@ -271,7 +371,8 @@ router.put('/:id/status', async (req, res) => {
     res.json({
       success: true,
       message: 'Status updated successfully',
-      candidate: result.candidate
+      candidate: result.candidate,
+      searchIndexed: true  // 🔥 NEW: Indicate that it's been indexed
     });
   } catch (error) {
     console.error('Error updating status:', error);
@@ -304,7 +405,8 @@ router.post('/:id/notes', async (req, res) => {
     res.json({
       success: true,
       message: 'Note added successfully',
-      candidate: result.candidate
+      candidate: result.candidate,
+      searchIndexed: true  // 🔥 NEW: Indicate that it's been indexed
     });
   } catch (error) {
     console.error('Error adding note:', error);
@@ -328,7 +430,8 @@ router.delete('/:id', async (req, res) => {
     
     res.json({
       success: true,
-      message: 'Candidate deactivated successfully'
+      message: 'Candidate deactivated successfully',
+      searchUpdated: true  // 🔥 NEW: Indicate search was updated
     });
   } catch (error) {
     console.error('Error deactivating candidate:', error);
@@ -395,7 +498,8 @@ router.post('/bulk/update-status', async (req, res) => {
     res.json({
       success: true,
       message: `${results.updated} candidates updated`,
-      results
+      results,
+      searchIndexed: true  // 🔥 NEW: All updated candidates are synced to search
     });
   } catch (error) {
     console.error('Error bulk updating:', error);

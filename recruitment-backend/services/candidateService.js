@@ -1,6 +1,6 @@
-// recruitment-backend/services/candidateService.js - NEW FILE
+// recruitment-backend/services/candidateService.js - UPDATED WITH AZURE SEARCH SYNC
 const database = require('../utils/database');
-
+const candidateSearchSync = require('./candidateSearchSync');
 
 class CandidateService {
   /**
@@ -34,10 +34,11 @@ class CandidateService {
       throw error;
     }
   }
+  
   /**
    * Get candidate activities
    */
- async getCandidateActivities(candidateId) {
+  async getCandidateActivities(candidateId) {
     try {
       const activities = await database.getCandidateActivities(candidateId);
       return activities;
@@ -68,6 +69,18 @@ class CandidateService {
         { source: 'Manual Entry' }
       );
       
+      // Get the full candidate data
+      const candidate = await database.getCandidateById(result.id);
+      
+      // 🔥 SYNC TO AZURE SEARCH
+      try {
+        await candidateSearchSync.onCandidateCreated(candidate);
+        console.log(`✅ Candidate ${candidate.name} synced to Azure Search`);
+      } catch (syncError) {
+        console.error('Azure Search sync failed:', syncError);
+        // Don't fail the operation if sync fails
+      }
+      
       if (global.sendNotification) {
         await global.sendNotification(createdBy, {
           type: 'candidate_created',
@@ -78,8 +91,6 @@ class CandidateService {
           actionUrl: `/candidates/${result.id}`
         });
       }
-      
-      const candidate = await database.getCandidateById(result.id);
       
       return {
         candidateId: result.id,
@@ -95,6 +106,18 @@ class CandidateService {
     try {
       const result = await database.createCandidateFromResponse(responseId, createdBy);
       
+      // Get the full candidate data
+      const candidate = await database.getCandidateById(result.id);
+      
+      // 🔥 SYNC TO AZURE SEARCH
+      try {
+        await candidateSearchSync.onCandidateCreated(candidate);
+        console.log(`✅ Candidate ${candidate.name} (from response) synced to Azure Search`);
+      } catch (syncError) {
+        console.error('Azure Search sync failed:', syncError);
+        // Don't fail the operation if sync fails
+      }
+      
       if (global.sendNotification) {
         await global.sendNotification(createdBy, {
           type: 'candidate_created',
@@ -105,8 +128,6 @@ class CandidateService {
           actionUrl: `/candidates/${result.id}`
         });
       }
-      
-      const candidate = await database.getCandidateById(result.id);
       
       return {
         candidateId: result.id,
@@ -149,6 +170,15 @@ class CandidateService {
       
       const candidate = await database.getCandidateById(candidateId);
       
+      // 🔥 SYNC TO AZURE SEARCH
+      try {
+        await candidateSearchSync.onCandidateUpdated(candidate);
+        console.log(`✅ Candidate ${candidate.name} updates synced to Azure Search`);
+      } catch (syncError) {
+        console.error('Azure Search sync failed:', syncError);
+        // Don't fail the operation if sync fails
+      }
+      
       return { candidate };
     } catch (error) {
       console.error('Error updating candidate:', error);
@@ -156,7 +186,7 @@ class CandidateService {
     }
   }
 
-async updateCandidateStatus(candidateId, status, reason, updatedBy) {
+  async updateCandidateStatus(candidateId, status, reason, updatedBy) {
     try {
       const currentCandidate = await database.getCandidateById(candidateId);
       if (!currentCandidate) {
@@ -183,12 +213,22 @@ async updateCandidateStatus(candidateId, status, reason, updatedBy) {
       
       const candidate = await database.getCandidateById(candidateId);
       
+      // 🔥 SYNC TO AZURE SEARCH
+      try {
+        await candidateSearchSync.onCandidateUpdated(candidate);
+        console.log(`✅ Candidate ${candidate.name} status synced to Azure Search`);
+      } catch (syncError) {
+        console.error('Azure Search sync failed:', syncError);
+        // Don't fail the operation if sync fails
+      }
+      
       return { candidate };
     } catch (error) {
       console.error('Error updating status:', error);
       throw error;
     }
   }
+  
   /**
    * Add note to candidate
    */
@@ -222,12 +262,22 @@ async updateCandidateStatus(candidateId, status, reason, updatedBy) {
       
       const updatedCandidate = await database.getCandidateById(candidateId);
       
+      // 🔥 SYNC TO AZURE SEARCH (notes update)
+      try {
+        await candidateSearchSync.onCandidateUpdated(updatedCandidate);
+        console.log(`✅ Candidate ${updatedCandidate.name} notes synced to Azure Search`);
+      } catch (syncError) {
+        console.error('Azure Search sync failed:', syncError);
+        // Don't fail the operation if sync fails
+      }
+      
       return { candidate: updatedCandidate };
     } catch (error) {
       console.error('Error adding note:', error);
       throw error;
     }
   }
+  
   async deactivateCandidate(candidateId, deactivatedBy) {
     try {
       const candidate = await database.getCandidateById(candidateId);
@@ -249,6 +299,21 @@ async updateCandidateStatus(candidateId, status, reason, updatedBy) {
         { previousStatus: candidate.status }
       );
       
+      // 🔥 SYNC TO AZURE SEARCH (or optionally remove from search)
+      try {
+        // Option 1: Update as inactive in search
+        const updatedCandidate = await database.getCandidateById(candidateId);
+        await candidateSearchSync.onCandidateUpdated(updatedCandidate);
+        
+        // Option 2: Remove from search entirely (uncomment if preferred)
+        // await candidateSearchSync.onCandidateDeleted(candidateId);
+        
+        console.log(`✅ Candidate ${candidate.name} deactivated in Azure Search`);
+      } catch (syncError) {
+        console.error('Azure Search sync failed:', syncError);
+        // Don't fail the operation if sync fails
+      }
+      
       return { success: true };
     } catch (error) {
       console.error('Error deactivating candidate:', error);
@@ -256,7 +321,7 @@ async updateCandidateStatus(candidateId, status, reason, updatedBy) {
     }
   }
 
- async getCandidateStats() {
+  async getCandidateStats() {
     try {
       const stats = await database.getCandidateStats();
       return stats;
@@ -348,7 +413,6 @@ async updateCandidateStatus(candidateId, status, reason, updatedBy) {
       throw error;
     }
   }
-
 }
 
 module.exports = new CandidateService();

@@ -25,14 +25,14 @@ const Login = () => {
     <div className="login-container">
       <div className="login-card">
         <div className="login-header">
-          <h1>Talent Engagement Platform</h1>
-          <p>Recruitment Management System</p>
-        </div>
-        
+        <h1>Quadrant 360</h1>
+        <p>Q-CRM • Talent Intelligence Platform</p>
+      </div>
+              
         <div className="login-content">
           <div className="login-logo">
             <div className="logo-circle">
-              <span>TEPS</span>
+              <span>Q360</span>
             </div>
           </div>
           
@@ -52,7 +52,7 @@ const Login = () => {
         </div>
         
         <div className="login-footer">
-          <p>© 2025 Quadrant Technologies. All rights reserved.</p>
+          <p>© 2025 Quadrant Technologies • Q-Suites Platform</p>
         </div>
       </div>
     </div>

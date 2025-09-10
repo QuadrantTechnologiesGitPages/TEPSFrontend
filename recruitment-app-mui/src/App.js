@@ -425,12 +425,6 @@ function AppContent() {
             </>
           )}
           <button 
-            className={`nav-tab ${currentView === 'search' ? 'active' : ''}`}
-            onClick={() => setCurrentView('search')}
-          >
-            Search & Match
-          </button>
-          <button 
               className={`nav-tab ${currentView === 'aiSearch' ? 'active' : ''}`}
               onClick={() => setCurrentView('aiSearch')}
             >
