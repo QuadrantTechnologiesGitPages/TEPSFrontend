@@ -3,7 +3,7 @@
 /* ==================== ROOT VARIABLES ==================== */
 :root {
   /* Brand-Style Color Palette (Deep Purple on Black) */
-  --primary-gradient: linear-gradient(135deg, #7f00ff 0%, #8b5cf6 100%);
+  --primary-gradient: linear-gradient(135deg, #181818 0%, #764ba2 100%);
   --secondary-gradient: linear-gradient(135deg, #3b0764 0%, #1e1b4b 100%);
   --accent-gradient: linear-gradient(135deg, #a21caf 0%, #ec4899 100%);
   --success-gradient: linear-gradient(135deg, #22c55e 0%, #15803d 100%);
@@ -141,7 +141,7 @@ body {
   right: 0;
   height: 1px;
   background: linear-gradient(90deg, transparent, rgba(139, 92, 246, 0.55), transparent);
-  animation: shimmer 3s infinite;
+  animation:normal;
 }
 
 @keyframes shimmer {

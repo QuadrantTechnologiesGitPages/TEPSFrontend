@@ -250,7 +250,7 @@
   right: 0;
   height: 1px;
   background: linear-gradient(90deg, transparent, rgba(139, 92, 246, 0.55), transparent);
-  animation: shimmer 3s infinite;
+  animation: normal;
 }
 
 @keyframes shimmer {

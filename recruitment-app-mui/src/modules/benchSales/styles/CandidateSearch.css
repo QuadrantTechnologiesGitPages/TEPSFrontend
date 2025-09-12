@@ -758,6 +758,7 @@
 /* Card Body */
 .card-body {
   padding: 1.5rem;
+  color: #0b0b16;
 }
 
 .candidate-details {
@@ -769,7 +770,7 @@
   align-items: center;
   gap: 0.75rem;
   margin: 0.75rem 0;
-  color: #94a3b8;
+  color: #0d0d0d;
   transition: color 0.3s;
 }
 
@@ -1028,4 +1029,163 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+}
+/* Add this to your CandidateSearch.css file */
+
+/* Semantic Caption Display */
+.semantic-caption {
+    background: linear-gradient(135deg, rgba(168, 85, 247, 0.1) 0%, rgba(124, 58, 237, 0.1) 100%);
+    border: 1px solid rgba(168, 85, 247, 0.3);
+    border-radius: 0.75rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    animation: captionFadeIn 0.5s ease-out;
+}
+
+@keyframes captionFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.caption-icon {
+    font-size: 1.25rem;
+    color: var(--neon-purple);
+    flex-shrink: 0;
+}
+
+.caption-text {
+    margin: 0;
+    color: #c4b5fd;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    font-style: italic;
+}
+
+/* Enhanced Match Score for Semantic Search */
+.match-score .score-label {
+    display: block;
+    font-size: 0.75rem;
+    opacity: 0.9;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-top: 0.25rem;
+}
+
+/* AI Match indicator */
+.match-score[data-ai="true"] {
+    position: relative;
+}
+
+.match-score[data-ai="true"]::before {
+    content: '🧠';
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    font-size: 0.75rem;
+    animation: pulse 2s infinite;
+}
+
+/* Debug info styling */
+.debug-info {
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+    color: #666;
+    margin-top: 10px;
+    padding: 5px;
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.debug-info div {
+    margin: 2px 0;
+}
+
+/* Loading state for semantic search */
+.results-loading.semantic::after {
+    content: 'AI is analyzing candidates with semantic understanding...';
+    display: block;
+    margin-top: 1rem;
+    color: #c4b5fd;
+    font-size: 0.9rem;
+    animation: fadeInOut 2s infinite;
+}
+
+@keyframes fadeInOut {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+}
+
+/* Semantic search indicator in results header */
+.results-header .search-type-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    background: var(--search-gradient);
+    color: rgb(65, 62, 62);
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 1rem;
+    margin-left: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* No semantic results message */
+.semantic-fallback-notice {
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    color: #fbbf24;
+    padding: 1rem;
+    border-radius: 0.75rem;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+}
+
+.semantic-fallback-notice::before {
+    content: '⚠️ ';
+    font-size: 1.25rem;
+    vertical-align: middle;
+    margin-right: 0.5rem;
+}
+
+/* ----- Fix: Darken card body + inner pills ----- */
+.candidate-search-container .ai-candidate-card .card-body {
+  background: #0f1021;               /* dark body */
+  color: #e5e7eb;                     /* light text */
+}
+
+/* Common pill/field containers inside the card body */
+.candidate-search-container .ai-candidate-card .detail-item,
+.candidate-search-container .ai-candidate-card .detail-item > *,
+.candidate-search-container .ai-candidate-card .resume-preview,
+.candidate-search-container .ai-candidate-card .match-reasons,
+.candidate-search-container .ai-candidate-card .skill-chip {
+  background: rgba(0, 0, 0, 0.35) !important;
+  color: #e5e7eb !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+/* If those white boxes are inputs (MUI/HTML), darken them too */
+.candidate-search-container .ai-candidate-card input,
+.candidate-search-container .ai-candidate-card textarea,
+.candidate-search-container .ai-candidate-card select,
+.candidate-search-container .ai-candidate-card .MuiInputBase-root,
+.candidate-search-container .ai-candidate-card .MuiOutlinedInput-root {
+  background-color: rgba(0, 0, 0, 0.45) !important;
+  color: #e5e7eb !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+/* Optional: soften hover tint on detail rows for dark mode */
+.candidate-search-container .ai-candidate-card .detail-item:hover {
+  color: #c4b5fd;
 }

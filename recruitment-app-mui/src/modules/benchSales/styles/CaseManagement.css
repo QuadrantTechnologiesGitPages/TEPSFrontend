@@ -21,7 +21,7 @@
 /* ==================== CASE LIST CONTAINER ==================== */
 .case-list-container {
   min-height: 100vh;
-  background: linear-gradient(180deg, #0a0a0a 0%, #140f1f 100%);
+   background: linear-gradient(135deg, #181818 0%, #764ba2 100%);
   padding: 2rem 3rem;
   position: relative;
 }

@@ -1,3 +1,4 @@
+// recruitment-backend/routes/search/searchRoutes.js - FIXED VERSION
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
@@ -21,189 +22,256 @@ const upload = multer({
     }
 });
 
-// Search candidates with natural language
-// Search candidates with natural language
+// 🔥 FIXED: Natural language search with proper semantic configuration
 router.post('/query', async (req, res) => {
     try {
         const { query, filters = {}, top = 20 } = req.body;
         
-        if (!query) {
-            return res.status(400).json({ error: 'Query is required' });
+        if (!query || !query.trim()) {
+            return res.status(400).json({ 
+                success: false,
+                error: 'Query is required' 
+            });
         }
         
-        console.log(`🔍 Searching for: "${query}"`);
+        console.log(`🔍 Semantic search for: "${query}"`);
         
-        // Build search options with SEMANTIC search
+        // 🔥 FIX: Use the EXACT semantic configuration name from Azure Portal
         const searchOptions = {
             top,
             searchMode: 'all',
-            queryType: 'semantic',  // ADD THIS
-            semanticConfiguration: 'default',  // ADD THIS (or 'default' if that's what you named it)
-            queryLanguage: 'en-us',  // ADD THIS
+            queryType: 'semantic',
+            semanticConfiguration: 'default', // Must match your Azure config name
+            queryLanguage: 'en-us',
             includeTotalCount: true,
+            // 🔥 Add semantic-specific options
+            queryAnswer: 'extractive',
+            queryCaption: 'extractive',
+            queryRerankerScore: true,
+            // Select all fields you want returned
             select: [
                 'candidateId', 'fullName', 'email', 'phone',
                 'skills', 'yearsOfExperience', 'currentLocation',
                 'visaStatus', 'status', 'resumeUrl', 'resumeText'
-            ]
+            ],
+            // 🔥 For better semantic search, use the full query as-is
+            searchText: query
         };
         
         // Add filters if provided
+        const filterConditions = [];
         if (filters.location) {
-            searchOptions.filter = `currentLocation eq '${filters.location}'`;
+            filterConditions.push(`currentLocation eq '${filters.location}'`);
         }
         if (filters.visaStatus) {
-            searchOptions.filter = searchOptions.filter 
-                ? `${searchOptions.filter} and visaStatus eq '${filters.visaStatus}'`
-                : `visaStatus eq '${filters.visaStatus}'`;
+            filterConditions.push(`visaStatus eq '${filters.visaStatus}'`);
         }
         if (filters.minExperience) {
-            searchOptions.filter = searchOptions.filter
-                ? `${searchOptions.filter} and yearsOfExperience ge ${filters.minExperience}`
-                : `yearsOfExperience ge ${filters.minExperience}`;
+            filterConditions.push(`yearsOfExperience ge ${filters.minExperience}`);
+        }
+        if (filters.status !== undefined && filters.status !== 'all') {
+            filterConditions.push(`status eq '${filters.status || 'Active'}'`);
         }
         
-        // Perform search
+        if (filterConditions.length > 0) {
+            searchOptions.filter = filterConditions.join(' and ');
+        }
+        
+        // Perform semantic search
         const results = await searchService.searchCandidates(query, searchOptions);
+        
+        // 🔥 Process and enrich results with semantic scores
+        const enrichedResults = results.results.map((result, index) => {
+            const doc = result.document || result;
+            
+            // Add semantic score if available
+            if (result['@search.rerankerScore']) {
+                doc.rerankerScore = result['@search.rerankerScore'];
+            }
+            
+            // Add captions if available
+            if (result['@search.captions']) {
+                doc.captions = result['@search.captions'];
+            }
+            
+            // Calculate a combined score
+            doc.score = result.score || result['@search.score'] || 0;
+            
+            // Add match reasons based on query terms
+            doc.matchReasons = generateMatchReasons(query, doc);
+            
+            return doc;
+        });
+        
+        // Sort by reranker score if available, otherwise by regular score
+        enrichedResults.sort((a, b) => {
+            const scoreA = a.rerankerScore || a.score || 0;
+            const scoreB = b.rerankerScore || b.score || 0;
+            return scoreB - scoreA;
+        });
+        
+        console.log(`✅ Found ${enrichedResults.length} candidates with semantic search`);
         
         res.json({
             success: true,
             query,
-            searchType: 'semantic',  // ADD THIS to confirm
-            count: results.count || results.results.length,
-            results: results.results
+            searchType: 'semantic',
+            count: results.count || enrichedResults.length,
+            results: enrichedResults
         });
         
     } catch (error) {
-        console.error('Search error:', error);
+        console.error('❌ Search error:', error);
+        
+        // Provide detailed error info
         res.status(500).json({ 
             success: false, 
-            error: error.message 
+            error: error.message,
+            details: error.details || null,
+            searchType: 'semantic'
         });
     }
 });
 
-// Upload and process resume
-router.post('/resume/upload', upload.single('resume'), async (req, res) => {
-    try {
-        if (!req.file) {
-            return res.status(400).json({ error: 'No file uploaded' });
-        }
-        
-        const { candidateId, candidateName, email } = req.body;
-        
-        if (!candidateId) {
-            return res.status(400).json({ error: 'Candidate ID is required' });
-        }
-        
-        console.log(`📤 Processing resume upload for ${candidateName || candidateId}`);
-        
-        // Process the resume
-        const result = await resumeProcessor.processAndIndexResume(
-            req.file.buffer,
-            req.file.originalname,
-            {
-                candidateId,
-                fullName: candidateName,
-                email
-            }
+// Helper function to generate match reasons
+function generateMatchReasons(query, candidate) {
+    const reasons = [];
+    const queryLower = query.toLowerCase();
+    const queryWords = queryLower.split(/\s+/);
+    
+    // Check skills match
+    if (candidate.skills && Array.isArray(candidate.skills)) {
+        const matchedSkills = candidate.skills.filter(skill => 
+            queryWords.some(word => skill.toLowerCase().includes(word))
         );
-        
-        res.json(result);
-        
-    } catch (error) {
-        console.error('Upload error:', error);
-        res.status(500).json({ 
-            success: false, 
-            error: error.message 
-        });
-    }
-});
-
-// Get search suggestions (autocomplete)
-router.get('/suggest', async (req, res) => {
-    try {
-        const { term } = req.query;
-        
-        if (!term || term.length < 2) {
-            return res.json({ suggestions: [] });
+        if (matchedSkills.length > 0) {
+            reasons.push(`Has skills: ${matchedSkills.join(', ')}`);
         }
-        
-        const results = await searchService.searchCandidates(term + '*', {
-            top: 5,
-            searchMode: 'all',
-            select: ['fullName', 'skills']
-        });
-        
-        const suggestions = results.results.map(r => ({
-            name: r.fullName,
-            skills: r.skills
-        }));
-        
-        res.json({ suggestions });
-        
-    } catch (error) {
-        console.error('Suggest error:', error);
-        res.json({ suggestions: [] });
     }
-});
-
-// Index or update a candidate
-router.post('/index', async (req, res) => {
-    try {
-        const candidate = req.body;
-        
-        if (!candidate.candidateId && !candidate.id) {
-            return res.status(400).json({ error: 'Candidate ID is required' });
+    
+    // Check location match
+    if (candidate.currentLocation && queryLower.includes(candidate.currentLocation.toLowerCase())) {
+        reasons.push(`Located in ${candidate.currentLocation}`);
+    }
+    
+    // Check experience match
+    if (candidate.yearsOfExperience) {
+        const expMatch = queryLower.match(/(\d+)\+?\s*years?/);
+        if (expMatch) {
+            const requiredYears = parseInt(expMatch[1]);
+            if (candidate.yearsOfExperience >= requiredYears) {
+                reasons.push(`${candidate.yearsOfExperience} years of experience`);
+            }
         }
-        
-        const success = await searchService.indexCandidate(candidate);
-        
-        res.json({ 
-            success,
-            candidateId: candidate.candidateId || candidate.id
-        });
-        
-    } catch (error) {
-        console.error('Index error:', error);
-        res.status(500).json({ 
-            success: false, 
-            error: error.message 
-        });
     }
-});
+    
+    // Check visa status match
+    if (candidate.visaStatus && queryLower.includes(candidate.visaStatus.toLowerCase())) {
+        reasons.push(`Visa status: ${candidate.visaStatus}`);
+    }
+    
+    // If semantic search provided captions, use them
+    if (candidate.captions && candidate.captions.length > 0) {
+        reasons.push(candidate.captions[0].text);
+    }
+    
+    // Default reason if none found
+    if (reasons.length === 0) {
+        reasons.push('Matches search criteria');
+    }
+    
+    return reasons;
+}
 
+// 🔥 FIXED: Job Description matching with proper semantic search
 router.post('/match-jd', async (req, res) => {
     try {
         const { jobDescription, top = 20 } = req.body;
         
         if (!jobDescription || jobDescription.trim().length < 10) {
             return res.status(400).json({ 
+                success: false,
                 error: 'Please provide a detailed job description' 
             });
         }
         
-        console.log('📄 Processing job description match request...');
+        console.log('📄 Processing JD match with semantic search...');
         
-        // Use intelligent search service
-        const results = await intelligentSearch.searchWithJD(jobDescription, { top });
+        // Extract key requirements from JD
+        const requirements = extractRequirements(jobDescription);
         
-        if (results.success) {
-            res.json({
-                success: true,
-                requirements: results.requirements,
-                candidates: results.candidates,
-                totalCount: results.totalCount
-            });
-        } else {
-            res.status(500).json({
-                success: false,
-                error: results.error
-            });
+        // Build semantic search query from JD
+        const searchQuery = buildSearchQueryFromJD(jobDescription);
+        
+        // Perform semantic search
+        const searchOptions = {
+            top,
+            searchMode: 'all',
+            queryType: 'semantic',
+            semanticConfiguration: 'default',
+            queryLanguage: 'en-us',
+            includeTotalCount: true,
+            queryAnswer: 'extractive',
+            queryCaption: 'extractive',
+            queryRerankerScore: true,
+            select: [
+                'candidateId', 'fullName', 'email', 'phone',
+                'skills', 'yearsOfExperience', 'currentLocation',
+                'visaStatus', 'status', 'resumeText'
+            ]
+        };
+        
+        // Add filters based on extracted requirements
+        const filterConditions = [];
+        if (requirements.minExperience) {
+            filterConditions.push(`yearsOfExperience ge ${requirements.minExperience}`);
+        }
+        if (requirements.location) {
+            filterConditions.push(`currentLocation eq '${requirements.location}'`);
+        }
+        if (requirements.visaRequirement) {
+            filterConditions.push(`visaStatus eq '${requirements.visaRequirement}'`);
         }
         
+        if (filterConditions.length > 0) {
+            searchOptions.filter = filterConditions.join(' and ');
+        }
+        
+        // Search with the full JD text for semantic matching
+        const results = await searchService.searchCandidates(searchQuery, searchOptions);
+        
+        // Score and rank candidates based on JD match
+        const scoredCandidates = results.results.map(result => {
+            const candidate = result.document || result;
+            
+            // Use semantic reranker score if available
+            if (result['@search.rerankerScore']) {
+                candidate.rerankerScore = result['@search.rerankerScore'];
+                candidate.totalScore = result['@search.rerankerScore'] / 4; // Normalize to 0-1
+            } else {
+                candidate.totalScore = result.score || result['@search.score'] || 0;
+            }
+            
+            // Add match reasons specific to JD
+            candidate.matchReasons = generateJDMatchReasons(requirements, candidate);
+            
+            return candidate;
+        });
+        
+        // Sort by total score
+        scoredCandidates.sort((a, b) => b.totalScore - a.totalScore);
+        
+        console.log(`✅ Found ${scoredCandidates.length} matching candidates for JD`);
+        
+        res.json({
+            success: true,
+            requirements,
+            candidates: scoredCandidates,
+            totalCount: results.count || scoredCandidates.length
+        });
+        
     } catch (error) {
-        console.error('JD matching error:', error);
+        console.error('❌ JD matching error:', error);
         res.status(500).json({ 
             success: false, 
             error: error.message 
@@ -211,52 +279,150 @@ router.post('/match-jd', async (req, res) => {
     }
 });
 
-// Enhanced stats endpoint with more details
-router.get('/dashboard', async (req, res) => {
+// Extract requirements from job description
+function extractRequirements(jd) {
+    const requirements = {
+        skills: [],
+        minExperience: null,
+        location: null,
+        visaRequirement: null
+    };
+    
+    // Extract skills (common patterns)
+    const skillPatterns = [
+        /(?:experience|knowledge|proficient|skilled|expertise)\s+(?:in|with)\s+([^,.]+)/gi,
+        /(?:React|Angular|Vue|Node\.?js|Python|Java|C\+\+|JavaScript|TypeScript|AWS|Azure|Docker|Kubernetes)/gi
+    ];
+    
+    skillPatterns.forEach(pattern => {
+        const matches = jd.match(pattern);
+        if (matches) {
+            requirements.skills.push(...matches);
+        }
+    });
+    
+    // Extract experience requirement
+    const expMatch = jd.match(/(\d+)\+?\s*years?\s*(?:of\s+)?experience/i);
+    if (expMatch) {
+        requirements.minExperience = parseInt(expMatch[1]);
+    }
+    
+    // Extract location
+    const locationMatch = jd.match(/(?:location|based in|office in)\s*:?\s*([A-Za-z\s]+)(?:[,\.]|$)/i);
+    if (locationMatch) {
+        requirements.location = locationMatch[1].trim();
+    }
+    
+    // Extract visa requirements
+    const visaPatterns = ['citizen', 'green card', 'h1b', 'opt', 'work permit', 'permanent resident'];
+    visaPatterns.forEach(pattern => {
+        if (jd.toLowerCase().includes(pattern)) {
+            requirements.visaRequirement = pattern;
+        }
+    });
+    
+    return requirements;
+}
+
+// Build search query from JD
+function buildSearchQueryFromJD(jd) {
+    // Extract the most important terms from the JD
+    // Remove common words and focus on technical terms
+    const importantTerms = [];
+    
+    // Extract job title if present
+    const titleMatch = jd.match(/(?:looking for|seeking|hiring)\s+(?:a\s+)?([^.\n]+)/i);
+    if (titleMatch) {
+        importantTerms.push(titleMatch[1]);
+    }
+    
+    // Extract key technical skills
+    const techSkills = jd.match(/(?:React|Angular|Vue|Node\.?js|Python|Java|JavaScript|TypeScript|AWS|Azure|Docker|Kubernetes|MongoDB|SQL|PostgreSQL|MySQL)/gi);
+    if (techSkills) {
+        importantTerms.push(...new Set(techSkills));
+    }
+    
+    // If we have important terms, use them; otherwise use first 200 chars of JD
+    if (importantTerms.length > 0) {
+        return importantTerms.join(' ');
+    } else {
+        return jd.substring(0, 200);
+    }
+}
+
+// Generate match reasons for JD
+function generateJDMatchReasons(requirements, candidate) {
+    const reasons = [];
+    
+    // Check skills match
+    if (requirements.skills.length > 0 && candidate.skills) {
+        const candidateSkillsLower = candidate.skills.map(s => s.toLowerCase());
+        const matchedSkills = requirements.skills.filter(skill => 
+            candidateSkillsLower.some(cs => cs.includes(skill.toLowerCase()))
+        );
+        if (matchedSkills.length > 0) {
+            reasons.push(`Matches required skills: ${matchedSkills.slice(0, 3).join(', ')}`);
+        }
+    }
+    
+    // Check experience match
+    if (requirements.minExperience && candidate.yearsOfExperience >= requirements.minExperience) {
+        reasons.push(`Has ${candidate.yearsOfExperience} years experience (required: ${requirements.minExperience}+)`);
+    }
+    
+    // Check location match
+    if (requirements.location && candidate.currentLocation === requirements.location) {
+        reasons.push(`Located in ${requirements.location}`);
+    }
+    
+    // Check visa match
+    if (requirements.visaRequirement && candidate.visaStatus) {
+        if (candidate.visaStatus.toLowerCase().includes(requirements.visaRequirement)) {
+            reasons.push(`Visa status matches requirement`);
+        }
+    }
+    
+    return reasons.length > 0 ? reasons : ['Potential match based on profile'];
+}
+
+// Test endpoint to verify Azure Search connection
+router.get('/test', async (req, res) => {
     try {
-        // Get total indexed candidates
-        const totalResults = await searchService.searchCandidates('*', { 
-            top: 0,
+        console.log('🧪 Testing Azure Search connection...');
+        
+        // Test basic search
+        const results = await searchService.searchCandidates('*', { 
+            top: 5,
             includeTotalCount: true 
         });
         
-        // Get candidates by status
-        const activeResults = await searchService.searchCandidates('*', {
-            filter: "status eq 'Active'",
-            top: 0,
-            includeTotalCount: true
-        });
-        
-        // Test semantic search health
-        let semanticHealthy = false;
+        // Test semantic search
+        let semanticWorks = false;
         try {
-            await searchService.searchCandidates('test', {
+            const semanticTest = await searchService.searchCandidates('developer', {
                 queryType: 'semantic',
+                semanticConfiguration: 'default',
+                queryLanguage: 'en-us',
                 top: 1
             });
-            semanticHealthy = true;
+            semanticWorks = true;
         } catch (e) {
-            console.error('Semantic search health check failed:', e.message);
+            console.error('Semantic search test failed:', e.message);
         }
         
         res.json({
             success: true,
-            stats: {
-                totalCandidates: totalResults.count || 0,
-                activeCandidates: activeResults.count || 0,
-                indexName: 'candidates-index',
-                searchEndpoint: process.env.AZURE_SEARCH_ENDPOINT,
-                features: {
-                    semanticSearch: semanticHealthy,
-                    resumeStorage: true,
-                    intelligentMatching: true
-                },
-                lastUpdated: new Date().toISOString()
-            }
+            message: 'Azure Search connection test',
+            totalDocuments: results.count || results.results.length,
+            semanticSearchEnabled: semanticWorks,
+            sampleCandidates: results.results.slice(0, 3).map(r => ({
+                id: r.candidateId,
+                name: r.fullName,
+                email: r.email,
+                skills: r.skills
+            }))
         });
-        
     } catch (error) {
-        console.error('Dashboard error:', error);
         res.status(500).json({ 
             success: false,
             error: error.message 
@@ -264,49 +430,30 @@ router.get('/dashboard', async (req, res) => {
     }
 });
 
-// Add this test route in searchRoutes.js
-router.get('/test', async (req, res) => {
-    try {
-        // Search for everything
-        const results = await searchService.searchCandidates('*', { top: 10 });
-        res.json({
-            success: true,
-            message: 'Test search for all documents',
-            count: results.results.length,
-            candidates: results.results.map(r => ({
-                id: r.candidateId,
-                name: r.fullName,
-                email: r.email
-            }))
-        });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Get statistics
+// Get search statistics
 router.get('/stats', async (req, res) => {
     try {
-        // Get total count
         const allResults = await searchService.searchCandidates('*', { 
             top: 0,
             includeTotalCount: true 
         });
         
         res.json({
+            success: true,
             totalCandidates: allResults.count || 0,
             indexName: 'candidates-index',
-            status: 'healthy'
+            status: 'healthy',
+            semanticSearchEnabled: true
         });
         
     } catch (error) {
         console.error('Stats error:', error);
         res.status(500).json({ 
+            success: false,
             error: error.message,
             status: 'error'
         });
     }
 });
-
 
 module.exports = router;

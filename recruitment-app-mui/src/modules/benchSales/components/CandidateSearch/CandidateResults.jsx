@@ -14,7 +14,7 @@ const CandidateResults = ({ candidates, loading, onCandidateAction, searchMode }
   if (!candidates || candidates.length === 0) {
     return (
       <div className="results-empty">
-        <div className="empty-icon">🔍</div>
+        <div className="empty-icon"></div>
         <h3>No results yet</h3>
         <p>Start searching to see AI-matched candidates</p>
       </div>

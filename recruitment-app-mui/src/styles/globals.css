@@ -761,7 +761,7 @@ body {
   }
 }
 .user-info-bar {
-  background: white;
+  background: rgb(9, 9, 9);
   padding: 10px 20px;
   border-radius: 10px;
   margin-bottom: 20px;
@@ -780,7 +780,7 @@ body {
 .logout-btn {
   padding: 6px 16px;
   background: #f56565;
-  color: white;
+ 
   border: none;
   border-radius: 6px;
   font-size: 13px;
