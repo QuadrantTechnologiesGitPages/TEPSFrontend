@@ -39,7 +39,7 @@ router.post('/query', async (req, res) => {
         // 🔥 FIX: Use the EXACT semantic configuration name from Azure Portal
         const searchOptions = {
             top,
-            searchMode: 'all',
+            searchMode: 'any',
             queryType: 'semantic',
             semanticConfiguration: 'default', // Must match your Azure config name
             queryLanguage: 'en-us',

@@ -21,7 +21,7 @@
 /* ==================== CASE LIST CONTAINER ==================== */
 .case-list-container {
   min-height: 100vh;
-   background: linear-gradient(135deg, #181818 0%, #764ba2 100%);
+   background: linear-gradient(135deg, #181818 0%, #020202 100%);
   padding: 2rem 3rem;
   position: relative;
 }
@@ -359,7 +359,7 @@
   border: 1px solid rgba(139, 92, 246, 0.3);
   border-radius: 8px;
   font-size: 0.75rem;
-  color: #c4b5fd;
+  color: #0d0d0d;
   transition: all 0.3s ease;
 }
 

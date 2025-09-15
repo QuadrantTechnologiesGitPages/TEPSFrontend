@@ -37,6 +37,8 @@ class SearchService {
                 includeTotalCount: true,
                 ...options // Spread all options to preserve semantic settings
             };
+
+            
             
             // 🔥 FIX: Ensure semantic search is properly configured
             if (options.queryType === 'semantic') {
@@ -57,9 +59,30 @@ class SearchService {
             // Use the searchText if provided, otherwise use query
             const searchText = options.searchText || query;
             
+                // 🔥 ADD THIS: Log the complete Azure Search request payload
+            console.log('📥 AZURE SEARCH REQUEST PAYLOAD:', {
+                searchText: searchText,
+                searchOptions: JSON.stringify(searchOptions, null, 2),
+                index: 'candidates-index',
+                endpoint: process.env.AZURE_SEARCH_ENDPOINT
+            });
             // Perform the search
             const searchResults = await this.searchClient.search(searchText, searchOptions);
             
+            // 🔥 ADD THIS: Log the raw Azure Search response
+            console.log('📤 AZURE SEARCH RAW RESPONSE:');
+            // Log first few results to see the structure
+            let resultCount = 0;
+            for await (const result of searchResults.results) {
+                if (resultCount === 0) {
+                    console.log('First result structure:', JSON.stringify(result, null, 2));
+                }
+                resultCount++;
+                // Re-iterate for actual processing
+                break;
+            }
+            console.log(`Total results count: ${searchResults.count}`);
+        
             // Collect results
             const results = [];
             let count = 0;

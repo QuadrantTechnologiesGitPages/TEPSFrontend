@@ -676,3 +676,150 @@ body {
     justify-content: flex-start;
   }
 }
+/* src/modules/benchSales/styles/Dashboard.css */
+
+/* Scope everything to this page to avoid global leaks */
+.bench-sales-dashboard {
+  position: relative;
+  padding: 16px 16px 24px;
+}
+
+.bench-sales-dashboard .dashboard-header {
+  position: relative;
+  z-index: 1;                  /* prevents right-rail overlay */
+  margin-bottom: 16px;
+}
+
+.bench-sales-dashboard .dashboard-content {
+  display: grid;
+  grid-template-columns: 1fr 320px;  /* main + right rail */
+  gap: 24px;
+  align-items: start;
+}
+
+/* Right rail never overlaps */
+.bench-sales-dashboard .dashboard-sidebar {
+  position: sticky;
+  top: 72px;                   /* under your top navbar */
+}
+
+/* Cards list spacing – prevent visual “overwriting” */
+.bench-sales-dashboard .case-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Card container – create its own layer to avoid bleed */
+.bench-sales-dashboard .case-item {
+  position: relative;
+  background: rgba(22, 22, 28, 0.7);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 12px 14px;
+  overflow: hidden;            /* clip any stray badges */
+}
+
+/* Header row wraps intelligently instead of colliding */
+.bench-sales-dashboard .case-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 12px;
+  margin-bottom: 6px;
+}
+
+/* Text truncation to prevent line overlap */
+.bench-sales-dashboard .case-details {
+  display: block;
+  line-height: 1.3;
+}
+.bench-sales-dashboard .case-details strong {
+  max-width: 60%;
+  display: inline-block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Meta wraps and never overlaps */
+.bench-sales-dashboard .case-meta {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  opacity: 0.85;
+}
+
+/* Badges */
+.bench-sales-dashboard .case-id {
+  font-weight: 600;
+  padding-right: 8px;
+}
+.bench-sales-dashboard .sla-badge,
+.bench-sales-dashboard .case-status,
+.bench-sales-dashboard .verification-badge {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 12px;
+  line-height: 1;              /* fixes badge-height pushing lines */
+  white-space: nowrap;
+}
+.bench-sales-dashboard .sla-badge.overdue   { background:#3a0f14; color:#ff8a8a; border:1px solid rgba(255,138,138,.25); }
+.bench-sales-dashboard .sla-badge.urgent    { background:#30220f; color:#ffcb6b; border:1px solid rgba(255,203,107,.25); }
+.bench-sales-dashboard .sla-badge.warning   { background:#182b23; color:#8de1b8; border:1px solid rgba(141,225,184,.25); }
+.bench-sales-dashboard .sla-badge.normal    { background:#1e2330; color:#a6b1ff; border:1px solid rgba(166,177,255,.25); }
+
+.bench-sales-dashboard .case-status.active   { background:#182b23; color:#86e3c3; }
+.bench-sales-dashboard .case-status.pending  { background:#2a2330; color:#d1a6ff; }
+.bench-sales-dashboard .case-status.inactive { background:#2b1e1e; color:#ff9b9b; }
+.bench-sales-dashboard .case-status.verified { background:#1b2a1b; color:#9be29b; }
+
+/* Expanded section separation */
+.bench-sales-dashboard .case-expanded {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(255,255,255,0.08);
+}
+.bench-sales-dashboard .expanded-section {
+  margin-bottom: 8px;
+}
+
+/* Buttons */
+.bench-sales-dashboard .refresh-btn,
+.bench-sales-dashboard .case-action-btn {
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.04);
+  color: #e6e6f0;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.bench-sales-dashboard .case-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Recent activity item spacing – no overlaps */
+.bench-sales-dashboard .activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bench-sales-dashboard .activity-item {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.bench-sales-dashboard .activity-item .activity-text {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
