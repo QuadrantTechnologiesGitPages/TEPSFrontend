@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const oauthService = require('../services/oauthService');
-const database = require('../utils/database');
+const database = require('../data/database');
 
 // ==================== GOOGLE OAuth ====================
 

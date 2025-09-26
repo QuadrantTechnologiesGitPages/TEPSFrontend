@@ -1,7 +1,7 @@
 // recruitment-backend/routes/form.routes.js - SIMPLIFIED VERSION
 const express = require('express');
 const router = express.Router();
-const database = require('../utils/database');
+const database = require('../data/database');
 
 // ==================== LEGACY FORM ROUTES ====================
 // These routes are kept for backward compatibility with existing frontend

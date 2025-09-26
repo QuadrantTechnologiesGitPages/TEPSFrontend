@@ -2,7 +2,7 @@
 const { google } = require('googleapis');
 const { ConfidentialClientApplication } = require('@azure/msal-node');
 const jwt = require('jsonwebtoken');
-const database = require('../utils/database');
+const database = require('../data/database');
 
 class OAuthService {
   constructor() {

@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
-const database = require('../utils/database');
+const database = require('../data/database');
 
 // ==================== GMAIL WEBHOOK ====================
 

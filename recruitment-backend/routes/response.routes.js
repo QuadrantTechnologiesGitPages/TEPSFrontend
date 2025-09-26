@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const responseService = require('../services/responseService');
-const database = require('../utils/database');
+const database = require('../data/database');
 
 // ==================== PUBLIC ROUTES (for candidates) ====================
 

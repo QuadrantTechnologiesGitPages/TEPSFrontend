@@ -1,6 +1,6 @@
 // recruitment-backend/services/communicationService.js
 
-const database = require('../utils/database');
+const database = require('../data/database');
 const oauthService = require('./oauthService');
 const { google } = require('googleapis');
 const { ConfidentialClientApplication } = require('@azure/msal-node');

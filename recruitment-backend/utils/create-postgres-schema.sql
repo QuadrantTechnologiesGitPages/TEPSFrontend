@@ -600,3 +600,270 @@ BEGIN
     RAISE NOTICE '  - Logging: 2';
     RAISE NOTICE '  - Total: 26 tables';
 END $$;
+
+
+
+-- Add to your schema
+CREATE TABLE IF NOT EXISTS shortlist_buckets (
+  id SERIAL PRIMARY KEY,
+  bucket_id VARCHAR(50) UNIQUE NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  requirement_id VARCHAR(50),
+  jd_text TEXT,
+  client_name VARCHAR(255),
+  created_by VARCHAR(255) NOT NULL,
+  expires_at TIMESTAMP,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS bucket_candidates (
+  id SERIAL PRIMARY KEY,
+  bucket_id INTEGER REFERENCES shortlist_buckets(id),
+  candidate_id INTEGER REFERENCES candidate(id),
+  added_by VARCHAR(255),
+  match_score FLOAT,
+  match_reasons TEXT[],
+  priority VARCHAR(20) DEFAULT 'normal',
+  notes TEXT,
+  added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(bucket_id, candidate_id)
+);
+
+CREATE TABLE IF NOT EXISTS bucket_shares (
+  id SERIAL PRIMARY KEY,
+  bucket_id INTEGER REFERENCES shortlist_buckets(id),
+  shared_with VARCHAR(255),
+  shared_by VARCHAR(255),
+  permissions VARCHAR(20) DEFAULT 'read',
+  shared_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS vendor_submissions (
+  id SERIAL PRIMARY KEY,
+  candidate_id INTEGER REFERENCES candidate(id),
+  vendor_id VARCHAR(50),
+  bucket_id INTEGER REFERENCES shortlist_buckets(id),
+  submitted_by VARCHAR(255),
+  rate VARCHAR(50),
+  status VARCHAR(50),
+  submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Indexes
+CREATE INDEX idx_bucket_active ON shortlist_buckets(is_active);
+CREATE INDEX idx_bucket_expires ON shortlist_buckets(expires_at);
+CREATE INDEX idx_bucket_candidates_bucket ON bucket_candidates(bucket_id);
+CREATE INDEX idx_bucket_candidates_candidate ON bucket_candidates(candidate_id);
+
+
+-- Update interviews table
+ALTER TABLE interviews ADD COLUMN IF NOT EXISTS interview_code VARCHAR(50);
+ALTER TABLE interviews ADD COLUMN IF NOT EXISTS interviewer_names JSONB;
+ALTER TABLE interviews ADD COLUMN IF NOT EXISTS instructions TEXT;
+ALTER TABLE interviews ADD COLUMN IF NOT EXISTS reschedule_count INTEGER DEFAULT 0;
+ALTER TABLE interviews ADD COLUMN IF NOT EXISTS reschedule_reason TEXT;
+ALTER TABLE interviews ADD COLUMN IF NOT EXISTS final_decision VARCHAR(20);
+ALTER TABLE interviews ADD COLUMN IF NOT EXISTS average_rating DECIMAL(3,2);
+
+-- Update interview_feedback table  
+ALTER TABLE interview_feedback ADD COLUMN IF NOT EXISTS problem_solving_rating INTEGER;
+ALTER TABLE interview_feedback ADD COLUMN IF NOT EXISTS culture_fit_rating INTEGER;
+ALTER TABLE interview_feedback ADD COLUMN IF NOT EXISTS strengths JSONB;
+ALTER TABLE interview_feedback ADD COLUMN IF NOT EXISTS weaknesses JSONB;
+ALTER TABLE interview_feedback ADD COLUMN IF NOT EXISTS hiring_decision VARCHAR(20);
+ALTER TABLE interview_feedback ADD COLUMN IF NOT EXISTS submitted_by VARCHAR(255);
+ALTER TABLE interview_feedback ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMP;
+
+-- Interview panel table
+CREATE TABLE IF NOT EXISTS interview_panel (
+  id SERIAL PRIMARY KEY,
+  interview_id INTEGER REFERENCES interviews(id),
+  interviewer_email VARCHAR(255),
+  role VARCHAR(50),
+  has_submitted_feedback BOOLEAN DEFAULT false,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Requirements table for JDs
+CREATE TABLE IF NOT EXISTS requirements (
+  id SERIAL PRIMARY KEY,
+  requirement_code VARCHAR(50) UNIQUE,
+  client_name VARCHAR(255),
+  jd_text TEXT,
+  required_skills TEXT[],
+  nice_to_have_skills TEXT[],
+  min_experience INTEGER,
+  max_experience INTEGER,
+  location VARCHAR(255),
+  created_by VARCHAR(255),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_interviews_candidate ON interviews(candidate_id);
+CREATE INDEX idx_interviews_status ON interviews(status);
+CREATE INDEX idx_interviews_date ON interviews(scheduled_date);
+CREATE INDEX idx_feedback_interview ON interview_feedback(interview_id);
+
+-- Interview questions table
+CREATE TABLE IF NOT EXISTS interview_questions (
+  id SERIAL PRIMARY KEY,
+  candidate_id INTEGER REFERENCES candidates(id),
+  requirement_id INTEGER,
+  question TEXT NOT NULL,
+  category VARCHAR(50),
+  difficulty VARCHAR(20),
+  follow_up TEXT,
+  expected_answer TEXT,
+  red_flags TEXT,
+  estimated_time INTEGER DEFAULT 5,
+  interview_round INTEGER DEFAULT 1,
+  generated_for VARCHAR(50),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_questions_candidate ON interview_questions(candidate_id);
+CREATE INDEX idx_questions_category ON interview_questions(category);
+-- Vendors table
+CREATE TABLE IF NOT EXISTS vendors (
+  id SERIAL PRIMARY KEY,
+  company_name VARCHAR(255) NOT NULL,
+  contact_person VARCHAR(255),
+  email VARCHAR(255),
+  phone VARCHAR(50),
+  address TEXT,
+  tier VARCHAR(20), -- premium, standard, basic
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Clients table
+CREATE TABLE IF NOT EXISTS clients (
+  id SERIAL PRIMARY KEY,
+  company_name VARCHAR(255) NOT NULL,
+  contact_person VARCHAR(255),
+  email VARCHAR(255),
+  phone VARCHAR(50),
+  address TEXT,
+  industry VARCHAR(100),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Vendor submissions
+CREATE TABLE IF NOT EXISTS vendor_submissions (
+  id SERIAL PRIMARY KEY,
+  submission_id VARCHAR(50) UNIQUE,
+  candidate_id INTEGER REFERENCES candidates(id),
+  vendor_id INTEGER REFERENCES vendors(id),
+  requirement_id INTEGER,
+  status VARCHAR(50),
+  rate_card JSONB,
+  available_from DATE,
+  notes TEXT,
+  submitted_by VARCHAR(255),
+  submitted_at TIMESTAMP,
+  last_updated TIMESTAMP
+);
+
+-- Client submissions
+CREATE TABLE IF NOT EXISTS client_submissions (
+  id SERIAL PRIMARY KEY,
+  submission_id VARCHAR(50) UNIQUE,
+  candidate_id INTEGER REFERENCES candidates(id),
+  client_id INTEGER REFERENCES clients(id),
+  vendor_submission_id INTEGER REFERENCES vendor_submissions(id),
+  requirement_id INTEGER,
+  status VARCHAR(50),
+  bill_rate DECIMAL(10,2),
+  proposed_start_date DATE,
+  end_client VARCHAR(255),
+  location VARCHAR(255),
+  notes TEXT,
+  submitted_by VARCHAR(255),
+  submitted_at TIMESTAMP
+);
+
+-- Placement offers
+CREATE TABLE IF NOT EXISTS placement_offers (
+  id SERIAL PRIMARY KEY,
+  offer_id VARCHAR(50) UNIQUE,
+  candidate_id INTEGER REFERENCES candidates(id),
+  client_submission_id INTEGER REFERENCES client_submissions(id),
+  offer_amount DECIMAL(10,2),
+  start_date DATE,
+  end_date DATE,
+  location VARCHAR(255),
+  position_title VARCHAR(255),
+  terms JSONB,
+  status VARCHAR(50),
+  response_date TIMESTAMP,
+  response_details JSONB,
+  created_by VARCHAR(255),
+  responded_by VARCHAR(255),
+  created_at TIMESTAMP
+);
+
+-- Final placements
+CREATE TABLE IF NOT EXISTS placements (
+  id SERIAL PRIMARY KEY,
+  placement_id VARCHAR(50) UNIQUE,
+  candidate_id INTEGER REFERENCES candidates(id),
+  client_id INTEGER REFERENCES clients(id),
+  vendor_id INTEGER REFERENCES vendors(id),
+  offer_id INTEGER REFERENCES placement_offers(id),
+  start_date DATE,
+  end_date DATE,
+  bill_rate DECIMAL(10,2),
+  pay_rate DECIMAL(10,2),
+  position_title VARCHAR(255),
+  location VARCHAR(255),
+  status VARCHAR(50),
+  created_at TIMESTAMP
+);
+
+-- Status history tracking
+CREATE TABLE IF NOT EXISTS submission_status_history (
+  id SERIAL PRIMARY KEY,
+  submission_id INTEGER,
+  submission_type VARCHAR(20), -- vendor or client
+  old_status VARCHAR(50),
+  new_status VARCHAR(50),
+  notes TEXT,
+  changed_at TIMESTAMP
+);
+
+-- Placement activities log
+CREATE TABLE IF NOT EXISTS placement_activities (
+  id SERIAL PRIMARY KEY,
+  activity_type VARCHAR(50),
+  candidate_id INTEGER,
+  vendor_id INTEGER,
+  client_id INTEGER,
+  submission_id INTEGER,
+  performed_by VARCHAR(255),
+  details TEXT,
+  created_at TIMESTAMP
+);
+
+-- Create indexes
+CREATE INDEX idx_vendor_subs_candidate ON vendor_submissions(candidate_id);
+CREATE INDEX idx_vendor_subs_vendor ON vendor_submissions(vendor_id);
+CREATE INDEX idx_client_subs_candidate ON client_submissions(candidate_id);
+CREATE INDEX idx_client_subs_client ON client_submissions(client_id);
+CREATE INDEX idx_offers_candidate ON placement_offers(candidate_id);
+CREATE INDEX idx_placements_candidate ON placements(candidate_id);
+
+-- Search indexing logs table
+CREATE TABLE IF NOT EXISTS search_index_logs (
+  id SERIAL PRIMARY KEY,
+  operation VARCHAR(50),
+  candidate_id INTEGER,
+  details JSONB,
+  indexed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_search_logs_candidate ON search_index_logs(candidate_id);
+CREATE INDEX idx_search_logs_operation ON search_index_logs(operation);
+CREATE INDEX idx_search_logs_date ON search_index_logs(indexed_at);

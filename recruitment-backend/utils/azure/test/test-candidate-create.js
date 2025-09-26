@@ -2,7 +2,7 @@
 require('dotenv').config();
 process.env.USE_POSTGRES = 'true'; // Force PostgreSQL
 
-const database = require('../../../utils/database-selector');
+const database = require('../../../data/database');
 
 async function testCreateCandidate() {
   try {

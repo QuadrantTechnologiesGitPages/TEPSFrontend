@@ -9,7 +9,7 @@ const socketIo = require('socket.io');
 dotenv.config();
 
 // Import database
-const database = require('./utils/database');
+const database = require('./data/database');
 
 // Import routes
 const authRoutes = require('./routes/auth.routes');
@@ -19,6 +19,13 @@ const webhookRoutes = require('./routes/webhook.routes');
 const formTemplateRoutes = require('./routes/formTemplate.routes');
 const responseRoutes = require('./routes/response.routes');
 const candidateRoutes = require('./routes/candidate.routes'); // NEW
+const caseRoutes = require('./routes/case.routes');
+const emailRoutes = require('./routes/email.routes');
+const shortlistRoutes = require('./routes/shortlist.routes');
+const interviewRoutes = require('./routes/interview.routes');
+const aiQuestionRoutes = require('./routes/aiQuestion.routes');
+const placementRoutes = require('./routes/placement.routes');
+const searchSyncRoutes = require('./routes/search/searchSync.routes');
 
 // Initialize Express app
 const app = express();
@@ -68,6 +75,14 @@ app.use('/api/webhooks', webhookRoutes);
 app.use('/api/templates', formTemplateRoutes);
 app.use('/api/responses', responseRoutes);
 app.use('/api/candidates', candidateRoutes); // NEW
+app.use('/api/cases', caseRoutes);
+app.use('/api/email', emailRoutes);
+app.use('/api/shortlist', shortlistRoutes);
+app.use('/api/interviews', interviewRoutes);
+app.use('/api/ai-questions', aiQuestionRoutes);
+app.use('/api/placements', placementRoutes);
+app.use('/api/search-sync', searchSyncRoutes);
+
 
 // API Documentation endpoint - UPDATED
 app.get('/api', (req, res) => {

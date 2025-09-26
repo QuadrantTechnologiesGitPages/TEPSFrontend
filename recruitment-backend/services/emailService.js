@@ -1,5 +1,5 @@
 // recruitment-backend/services/emailService.js - MAILTO VERSION
-const database = require('../utils/database');
+const database = require('../data/database');
 
 class EmailService {
   /**

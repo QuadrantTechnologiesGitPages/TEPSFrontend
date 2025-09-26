@@ -162,7 +162,7 @@ class CandidateSearchSync {
             console.log('🔄 Starting full candidate sync to Azure Search...');
             
             // This would get all candidates from your database
-            const Database = require('../utils/database');
+            const Database = require('../data/database');
             const candidates = await Database.getCandidates({ limit: 1000 });
             
             console.log(`📊 Found ${candidates.length} candidates to sync`);
@@ -188,7 +188,7 @@ class CandidateSearchSync {
         try {
             console.log(`🔄 Syncing batch of ${candidateIds.length} candidates...`);
             
-            const Database = require('../utils/database');
+            const Database = require('../data/database');
             const candidates = [];
             
             // Fetch each candidate

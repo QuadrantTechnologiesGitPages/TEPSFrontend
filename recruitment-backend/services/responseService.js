@@ -1,5 +1,5 @@
 // recruitment-backend/services/responseService.js
-const database = require('../utils/database-selector');
+const database = require('../data/database');
 const emailService = require('./emailService');
 
 class ResponseService {
