@@ -1,5 +1,5 @@
 // recruitment-backend/services/formTemplateService.js
-const database = require('../utils/database');
+const database = require('../utils/database-selector');
 const crypto = require('crypto');
 
 class FormTemplateService {
